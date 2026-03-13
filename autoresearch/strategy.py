@@ -1,6 +1,6 @@
-# EXPERIMENT: rsi_weight_boost
-# HYPOTHESIS: MACD is a trend-following indicator that often contradicts RSI extremes — when RSI is oversold (<30), MACD is typically still bearish, adding 12 points to bear_score and partially cancelling the RSI bull signal. Since our strategy is RSI mean-reversion, the RSI component should dominate. Shifting 5% weight from MACD to RSI makes extremes score higher, boosting confidence on quality signals and improving win rate / Sharpe.
-# CHANGE: CONF_WEIGHT_RSI from 0.35 to 0.40, CONF_WEIGHT_MACD from 0.15 to 0.10 (sum unchanged at 1.0)
+# EXPERIMENT: tighter_rsi_thresholds
+# HYPOTHESIS: RSI_OVERSOLD=30 fires on RSI readings 28-30 which are less extreme and produce weaker mean-reversion. Tightening to 28/72 filters out marginal extreme signals — those at RSI 28-30 now score only ~24 pts (neutral zone) vs 40 pts (extreme), dropping them below MIN_CONFIDENCE=58. With 32 current trades we can afford to lose 3-5 while staying >10. Remaining signals at RSI<28/RSI>72 represent stronger oversold/overbought conditions with historically higher mean-reversion accuracy, improving win rate and Sharpe/Sortino.
+# CHANGE: RSI_OVERSOLD from 30 to 28, RSI_OVERBOUGHT from 70 to 72
 
 """
 Pure-Python intraday day trading strategy — NO LLM calls.
@@ -19,9 +19,9 @@ from typing import Literal
 # ---------------------------------------------------------------------------
 # Experiment metadata (updated by the evolution agent each iteration)
 # ---------------------------------------------------------------------------
-EXPERIMENT_NAME = "rsi_weight_boost"
-EXPERIMENT_HYPOTHESIS = "MACD is a trend-following indicator that often contradicts RSI extremes — when RSI is oversold (<30), MACD is typically still bearish, adding 12 points to bear_score and partially cancelling the RSI bull signal. Since our strategy is RSI mean-reversion, the RSI component should dominate. Shifting 5% weight from MACD to RSI makes extremes score higher, boosting confidence on quality signals and improving win rate / Sharpe."
-EXPERIMENT_CHANGE = "CONF_WEIGHT_RSI from 0.35 to 0.40, CONF_WEIGHT_MACD from 0.15 to 0.10 (sum unchanged at 1.0)"
+EXPERIMENT_NAME = "tighter_rsi_thresholds"
+EXPERIMENT_HYPOTHESIS = "RSI_OVERSOLD=30 fires on RSI readings 28-30 which are less extreme and produce weaker mean-reversion. Tightening to 28/72 filters out marginal extreme signals — those at RSI 28-30 now score only ~24 pts (neutral zone) vs 40 pts (extreme), dropping them below MIN_CONFIDENCE=58. With 32 current trades we can afford to lose 3-5 while staying >10. Remaining signals at RSI<28/RSI>72 represent stronger oversold/overbought conditions with historically higher mean-reversion accuracy, improving win rate and Sharpe/Sortino."
+EXPERIMENT_CHANGE = "RSI_OVERSOLD from 30 to 28, RSI_OVERBOUGHT from 70 to 72"
 
 # ---------------------------------------------------------------------------
 # Tunable parameters — agent may change any of these
@@ -29,8 +29,8 @@ EXPERIMENT_CHANGE = "CONF_WEIGHT_RSI from 0.35 to 0.40, CONF_WEIGHT_MACD from 0.
 
 # RSI thresholds
 RSI_PERIOD = 14
-RSI_OVERSOLD = 30           # Buy signal below this
-RSI_OVERBOUGHT = 70         # Sell signal above this
+RSI_OVERSOLD = 28           # Buy signal below this
+RSI_OVERBOUGHT = 72         # Sell signal above this
 RSI_NEUTRAL_LOW = 45        # Weak bull zone lower bound
 RSI_NEUTRAL_HIGH = 55       # Weak bear zone upper bound
 
