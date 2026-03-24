@@ -218,8 +218,10 @@ def _run_agent_claude(prompt: str, quiet: bool = False) -> tuple[bool, str]:
 
     Returns (success, output_or_error).
     """
+    import ast as _ast
     import re as _re
 
+    # Check API key before logging — avoid printing misleading progress if key is missing
     api_key = os.environ.get("OPENROUTER_API_KEY", "")
     if not api_key:
         return False, "OPENROUTER_API_KEY not set in environment"
@@ -254,22 +256,35 @@ def _run_agent_claude(prompt: str, quiet: bool = False) -> tuple[bool, str]:
     except httpx.TimeoutException:
         return False, f"Agent timed out after {AGENT_TIMEOUT_SEC}s"
     except httpx.HTTPStatusError as e:
-        return False, f"OpenRouter API error {e.response.status_code}: {e.response.text[:300]}"
+        status = e.response.status_code
+        # Redact API key from response body to avoid auth token leaks in logs
+        safe_body = e.response.text[:300].replace(
+            os.environ.get("OPENROUTER_API_KEY", ""), "[REDACTED]"
+        )
+        return False, f"OpenRouter API error {status}: {safe_body}"
     except (KeyError, IndexError) as e:
         return False, f"Unexpected API response structure: {e}"
     except Exception as e:
         return False, f"Agent error: {e}"
 
-    # Parse the ```python ... ``` code block from the response
-    match = _re.search(r"```python\s*\n(.*?)```", content, _re.DOTALL)
-    if not match:
+    # Parse the ```python ... ``` code block from the response.
+    # Find ALL python code blocks and take the longest one (most likely the full file).
+    # This avoids mis-matching on backtick docstrings inside a code block.
+    blocks = _re.findall(r"```python\s*\n(.*?)```", content, _re.DOTALL)
+    if not blocks:
         # Fallback: try plain ``` block
-        match = _re.search(r"```\s*\n(.*?)```", content, _re.DOTALL)
+        plain_blocks = _re.findall(r"```\s*\n(.*?)```", content, _re.DOTALL)
+        if not plain_blocks:
+            return False, f"No ```python code block found in model response. Response preview: {content[:300]}"
+        new_strategy_code = max(plain_blocks, key=len)
+    else:
+        new_strategy_code = max(blocks, key=len)  # take longest block = full file
 
-    if not match:
-        return False, f"No python code block found in model response. Response preview: {content[:300]}"
-
-    new_strategy_code = match.group(1)
+    # Validate syntax BEFORE writing — never overwrite strategy.py with broken code
+    try:
+        _ast.parse(new_strategy_code)
+    except SyntaxError as e:
+        return False, f"Model returned invalid Python (syntax error: {e}). strategy.py NOT modified."
 
     # Write the new strategy.py
     try:
