@@ -37,6 +37,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import ast
 import httpx
 from dotenv import load_dotenv
 
@@ -254,22 +255,32 @@ def _run_agent_claude(prompt: str, quiet: bool = False) -> tuple[bool, str]:
     except httpx.TimeoutException:
         return False, f"Agent timed out after {AGENT_TIMEOUT_SEC}s"
     except httpx.HTTPStatusError as e:
-        return False, f"OpenRouter API error {e.response.status_code}: {e.response.text[:300]}"
+        # Don't expose response body for auth errors — could contain token echoes
+        if e.response.status_code in (401, 403):
+            return False, f"OpenRouter API error {e.response.status_code}: authentication failed"
+        return False, f"OpenRouter API error {e.response.status_code}"
     except (KeyError, IndexError) as e:
         return False, f"Unexpected API response structure: {e}"
     except Exception as e:
         return False, f"Agent error: {e}"
 
-    # Parse the ```python ... ``` code block from the response
-    match = _re.search(r"```python\s*\n(.*?)```", content, _re.DOTALL)
-    if not match:
-        # Fallback: try plain ``` block
-        match = _re.search(r"```\s*\n(.*?)```", content, _re.DOTALL)
+    # Parse the ```python ... ``` code block — take the longest block in case of
+    # multiple blocks (e.g. illustrative snippets before the full file).
+    blocks = _re.findall(r"```python\s*\n(.*?)```", content, _re.DOTALL)
+    if not blocks:
+        # Fallback: plain ``` blocks
+        blocks = _re.findall(r"```\s*\n(.*?)```", content, _re.DOTALL)
 
-    if not match:
+    if not blocks:
         return False, f"No python code block found in model response. Response preview: {content[:300]}"
 
-    new_strategy_code = match.group(1)
+    new_strategy_code = max(blocks, key=len)  # longest block = most likely the full file
+
+    # Validate syntax BEFORE writing — a malformed response must not corrupt strategy.py
+    try:
+        ast.parse(new_strategy_code)
+    except SyntaxError as e:
+        return False, f"Model returned invalid Python (syntax error: {e}). strategy.py NOT modified."
 
     # Write the new strategy.py
     try:
