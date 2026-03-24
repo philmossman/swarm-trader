@@ -37,6 +37,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -135,14 +136,20 @@ def _build_agent_prompt(
     recent_experiments: list[dict],
     backtest_days: int,
 ) -> str:
-    """Build the full prompt for the coding agent."""
+    """Build the full prompt for the coding agent, embedding strategy.py content inline."""
     exp_history = _format_experiments_for_prompt(recent_experiments)
 
     current_fitness_str = f"{current_fitness:.4f}" if current_fitness is not None else "not yet measured"
     baseline_str = f"{baseline_fitness:.4f}"
 
+    # Embed the full strategy.py content so the model doesn't need file access
+    try:
+        strategy_content = STRATEGY_PATH.read_text()
+    except Exception as e:
+        strategy_content = f"<ERROR: could not read strategy.py: {e}>"
+
     prompt = textwrap.dedent(f"""\
-        You are an autonomous trading strategy researcher. Your ONLY job is to modify `autoresearch/strategy.py` to improve its backtest fitness score.
+        You are an autonomous trading strategy researcher. Your ONLY job is to modify `strategy.py` to improve its backtest fitness score.
 
         ## Current Status
         - Iteration: {iteration} of {total_iterations}
@@ -150,30 +157,34 @@ def _build_agent_prompt(
         - Current best fitness: {current_fitness_str}
         - Backtest window: last {backtest_days} trading days
 
+        ## Current strategy.py
+        ```python
+        {strategy_content}
+        ```
+
         ## Your Task
-        1. Read `autoresearch/program.md` — it contains your full instructions and the fitness formula
-        2. Read `autoresearch/strategy.py` — this is the file you will modify
-        3. Review the experiment history below — don't repeat failed experiments
-        4. Form ONE clear hypothesis about what change should improve fitness
-        5. Make exactly ONE focused change to `autoresearch/strategy.py`
-        6. Update the comment block at the top of strategy.py:
+        1. Review the experiment history below — don't repeat failed experiments
+        2. Form ONE clear hypothesis about what change should improve fitness
+        3. Make exactly ONE focused change to the strategy
+        4. Update the comment block at the top of strategy.py:
            ```
            # EXPERIMENT: <short_name>
            # HYPOTHESIS: <why this change should help>
            # CHANGE: <what you modified>
            ```
+        5. Return the COMPLETE modified strategy.py as a single ```python ... ``` code block — nothing else
 
         ## Experiment History (most recent {len(recent_experiments)} experiments)
         {exp_history}
 
         ## Rules (CRITICAL — violations will cause the experiment to be reverted)
-        - Modify ONLY `autoresearch/strategy.py` — do not touch any other file
         - The strategy must be pure Python — no LLM calls, no network calls, no randomness
         - Every Signal must have a valid stop_price and target_price
         - The `generate_signals(bars_df, market_context)` function signature must be preserved
         - The `Signal` dataclass fields must be preserved (ticker, direction, confidence, entry_price, stop_price, target_price, reasoning)
         - Make ONE change — compound changes are hard to learn from
         - The code must be syntactically valid Python
+        - Return ONLY the complete Python file as a ```python ... ``` code block — no preamble, no explanation outside the block
 
         ## Fitness Formula (higher is better)
         fitness = (sharpe * 0.35) + (sortino * 0.25) + (total_return_pct * 0.20) + (win_rate * 0.10) + (profit_factor * 0.10)
@@ -191,44 +202,85 @@ def _build_agent_prompt(
         - Change MACD periods
         - Add volume acceleration signal
 
-        Make your change now.
+        Return ONLY the complete modified strategy.py as a ```python ... ``` code block.
     """)
     return prompt
 
 
 def _run_agent_claude(prompt: str, quiet: bool = False) -> tuple[bool, str]:
     """
-    Invoke claude CLI to modify strategy.py.
+    Call the Anthropic model via OpenRouter API directly (no CLI subprocess).
+
+    The subprocess-based claude CLI hangs when called with capture_output=True
+    because it requires a TTY (GitHub issue #9026). Instead, we call OpenRouter
+    directly using httpx, ask the model to return the complete modified
+    strategy.py as a ```python ... ``` code block, then write it back to disk.
+
     Returns (success, output_or_error).
     """
-    if not quiet:
-        print("  [agent] Invoking claude...", file=sys.stderr)
+    import re as _re
 
-    cmd = [
-        "claude",
-        "--print",
-        "--allowedTools", "Read,Edit,Bash",
-        "-p", prompt,
-    ]
+    api_key = os.environ.get("OPENROUTER_API_KEY", "")
+    if not api_key:
+        return False, "OPENROUTER_API_KEY not set in environment"
+
+    if not quiet:
+        print("  [agent] Calling OpenRouter API (anthropic/claude-sonnet-4-5)...", file=sys.stderr)
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/swarm-trader",
+        "X-Title": "swarm-trader autoresearch",
+    }
+    payload = {
+        "model": "anthropic/claude-sonnet-4-5",
+        "max_tokens": 8192,
+        "messages": [
+            {"role": "user", "content": prompt},
+        ],
+    }
 
     try:
-        result = subprocess.run(
-            cmd,
-            cwd=str(REPO_ROOT),
-            capture_output=True,
-            text=True,
+        response = httpx.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=payload,
             timeout=AGENT_TIMEOUT_SEC,
         )
-        if result.returncode != 0:
-            err = result.stderr.strip() or result.stdout.strip()
-            return False, f"claude exited with code {result.returncode}: {err[:200]}"
-        return True, result.stdout.strip()
-    except subprocess.TimeoutExpired:
+        response.raise_for_status()
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+    except httpx.TimeoutException:
         return False, f"Agent timed out after {AGENT_TIMEOUT_SEC}s"
-    except FileNotFoundError:
-        return False, "claude CLI not found in PATH. Install it or use --agent codex."
+    except httpx.HTTPStatusError as e:
+        return False, f"OpenRouter API error {e.response.status_code}: {e.response.text[:300]}"
+    except (KeyError, IndexError) as e:
+        return False, f"Unexpected API response structure: {e}"
     except Exception as e:
         return False, f"Agent error: {e}"
+
+    # Parse the ```python ... ``` code block from the response
+    match = _re.search(r"```python\s*\n(.*?)```", content, _re.DOTALL)
+    if not match:
+        # Fallback: try plain ``` block
+        match = _re.search(r"```\s*\n(.*?)```", content, _re.DOTALL)
+
+    if not match:
+        return False, f"No python code block found in model response. Response preview: {content[:300]}"
+
+    new_strategy_code = match.group(1)
+
+    # Write the new strategy.py
+    try:
+        STRATEGY_PATH.write_text(new_strategy_code)
+    except Exception as e:
+        return False, f"Failed to write strategy.py: {e}"
+
+    if not quiet:
+        print("  [agent] strategy.py updated from API response.", file=sys.stderr)
+
+    return True, content
 
 
 def _run_agent_dry_run(prompt: str, quiet: bool = False) -> tuple[bool, str]:
@@ -402,7 +454,8 @@ def _print_summary(experiments: list[dict], baseline_fitness: float) -> None:
         sharpe = metrics.get("sharpe_ratio", 0)
         trades = metrics.get("num_trades", 0)
         hyp = exp.get("hypothesis", "?")[:48]
-        print(f"{eid:<10} {fitness:<12.4f} {kept_str:<8} {ret:<8.2f} {sharpe:<8.3f} {trades:<8} {hyp}")
+        fitness_str = f"{fitness:.4f}" if fitness is not None else "N/A"
+        print(f"{eid:<10} {fitness_str:<12} {kept_str:<8} {ret:<8.2f} {sharpe:<8.3f} {trades:<8} {hyp}")
 
     print("=" * 80)
 
