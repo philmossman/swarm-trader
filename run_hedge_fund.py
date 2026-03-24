@@ -147,6 +147,28 @@ Examples:
                 print(f"⚠️  --swing-only: skipping non-swing tickers: {', '.join(excluded)}")
             tickers_to_analyze = filtered
 
+            # Close any existing positions in non-swing tickers —
+            # --swing-only means we must not hold these overnight at all.
+            non_swing_open = [
+                p for p in positions_raw
+                if p["symbol"] not in ALL_UNIVERSE_TICKERS and float(p.get("qty", 0)) != 0
+            ]
+            if non_swing_open:
+                print(f"🚫 --swing-only: closing {len(non_swing_open)} non-swing position(s): {[p['symbol'] for p in non_swing_open]}")
+                from execute_trades import place_order
+                for p in non_swing_open:
+                    qty = float(p["qty"])
+                    action = "sell" if qty > 0 else "cover"
+                    ticker = p["symbol"]
+                    if not args.execute:
+                        print(f"  [DRY RUN] would {action.upper()} {ticker} ×{int(abs(qty))}")
+                        continue
+                    try:
+                        result = place_order(ticker, action, int(abs(qty)))
+                        print(f"  {action.upper()} {ticker} ×{int(abs(qty))}: order {result.get('id','?')} {result.get('status','?')}")
+                    except Exception as exc:
+                        print(f"  ⚠️  Failed to close {ticker}: {exc}", file=sys.stderr)
+
         if not tickers_to_analyze:
             print("❌ No tickers to analyze. Either specify --tickers or hold some positions.")
             return 1
@@ -193,12 +215,13 @@ Examples:
             print("❌ No trading decisions generated")
             return 1
 
-        # Execution guard: when --swing-only, block any trades on non-swing tickers
+        # Execution guard: when --swing-only, block any trades on non-swing tickers.
+        # This is a safety net — tickers_to_analyze should already be filtered above.
         if args.swing_only:
             non_swing = {t: d for t, d in decisions.items() if t not in ALL_UNIVERSE_TICKERS}
             if non_swing:
                 for ticker in non_swing:
-                    print(f"⚠️  EXECUTION GUARD: skipping {ticker} — not in swing universe (not safe overnight)")
+                    print(f"🚫 EXECUTION GUARD: blocked trade for {ticker} — not in swing universe. Check --tickers filter.", file=sys.stderr)
                 decisions = {t: d for t, d in decisions.items() if t in ALL_UNIVERSE_TICKERS}
 
         # Execute or preview trades

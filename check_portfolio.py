@@ -108,7 +108,7 @@ def output_telegram(equity, cash, daily_pl, daily_pl_pct, positions, big_movers,
     print(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M PST')}")
     print()
     print(f"Portfolio: ${equity:,.2f}")
-    print(f"Cash (incl. short proceeds): ${cash:,.2f} ({cash/equity*100:.1f}%)")
+    print(f"Cash (incl. short proceeds): ${cash:,.2f} ({(cash/equity*100) if equity else 0:.1f}%)")
     print(f"{pl_emoji} Daily P/L: ${daily_pl:+,.2f} ({daily_pl_pct:+.2f}%)")
     print()
 
@@ -151,7 +151,7 @@ def output_terminal(equity, cash, daily_pl, daily_pl_pct, positions, big_movers,
     print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M PST')}")
     print(f"{'='*60}")
     print(f"  Equity:   ${equity:>12,.2f}")
-    print(f"  Cash (incl. short proceeds): ${cash:>12,.2f}  ({cash/equity*100:.1f}%)")
+    print(f"  Cash (incl. short proceeds): ${cash:>12,.2f}  ({(cash/equity*100) if equity else 0:.1f}%)")
     print(f"  Daily P/L: ${daily_pl:>+11,.2f}  ({daily_pl_pct:+.2f}%)")
     print(f"{'='*60}")
     print()
