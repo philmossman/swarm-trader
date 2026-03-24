@@ -29,6 +29,7 @@ from src.alpaca_integration import (
     format_positions_summary,
 )
 from src.main import run_hedge_fund
+from src.config import ALL_UNIVERSE_TICKERS
 
 
 def _resolve_openclaw_model(fallback="qwen3.5:397b-cloud"):
@@ -76,6 +77,11 @@ Examples:
         "--tickers", 
         type=str, 
         help="Comma-separated list of specific tickers to analyze (default: all holdings)"
+    )
+    parser.add_argument(
+        "--swing-only",
+        action="store_true",
+        help="Restrict analysis and execution to swing universe tickers only (safe for overnight holds)",
     )
     parser.add_argument(
         "--telegram", 
@@ -132,14 +138,39 @@ Examples:
             held_tickers = [p["symbol"] for p in positions_raw if float(p.get("qty", 0)) != 0]
             tickers_to_analyze = held_tickers
             portfolio = convert_to_portfolio(positions_raw, account)
-        
+
+        # --swing-only guard: filter to swing universe only (safe for overnight holds)
+        if args.swing_only:
+            filtered = [t for t in tickers_to_analyze if t in ALL_UNIVERSE_TICKERS]
+            excluded = [t for t in tickers_to_analyze if t not in ALL_UNIVERSE_TICKERS]
+            if excluded:
+                print(f"⚠️  --swing-only: skipping non-swing tickers: {', '.join(excluded)}")
+            tickers_to_analyze = filtered
+
         if not tickers_to_analyze:
             print("❌ No tickers to analyze. Either specify --tickers or hold some positions.")
             return 1
             
         print(f"🔍 Analyzing {len(tickers_to_analyze)} ticker(s): {', '.join(tickers_to_analyze)}")
         print(f"🤖 Using analysts: {', '.join(selected_analysts)}")
-        print(f"🧠 Model: {args.model} (Ollama via OpenClaw)")
+        # Detect provider from model name prefix
+        model_str = args.model or ""
+        if "/" in model_str and not model_str.startswith("ollama/"):
+            detected_provider = "OpenRouter"
+        elif model_str.startswith("gpt") or model_str.startswith("o1") or model_str.startswith("o3"):
+            detected_provider = "OpenAI"
+        elif model_str.startswith("claude"):
+            detected_provider = "Anthropic"
+        elif model_str.startswith("gemini"):
+            detected_provider = "Google"
+        elif model_str.startswith("deepseek"):
+            detected_provider = "DeepSeek"
+        elif model_str.startswith("grok"):
+            detected_provider = "xAI"
+        else:
+            detected_provider = "Ollama"
+
+        print(f"🧠 Model: {args.model} ({detected_provider})")
         print(f"💼 Mode: {'LIVE TRADING' if args.execute else 'DRY RUN'}")
         print()
         
@@ -152,7 +183,7 @@ Examples:
             show_reasoning=args.show_reasoning,
             selected_analysts=selected_analysts,
             model_name=args.model,
-            model_provider="Ollama",
+            model_provider=detected_provider,
         )
         
         decisions = result.get("decisions", {})
@@ -161,7 +192,15 @@ Examples:
         if not decisions:
             print("❌ No trading decisions generated")
             return 1
-            
+
+        # Execution guard: when --swing-only, block any trades on non-swing tickers
+        if args.swing_only:
+            non_swing = {t: d for t, d in decisions.items() if t not in ALL_UNIVERSE_TICKERS}
+            if non_swing:
+                for ticker in non_swing:
+                    print(f"⚠️  EXECUTION GUARD: skipping {ticker} — not in swing universe (not safe overnight)")
+                decisions = {t: d for t, d in decisions.items() if t in ALL_UNIVERSE_TICKERS}
+
         # Execute or preview trades
         trade_results = execute_decisions(
             decisions=decisions,
