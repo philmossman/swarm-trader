@@ -1,6 +1,6 @@
-# EXPERIMENT: vwap_threshold_tighten
-# HYPOTHESIS: Current fitness=10.0740 with exceptional 91.3% win rate shows outstanding signal quality. Most core parameters have reached diminishing returns through extensive testing. VWAP component has significant 30% confidence weight (second highest) but VWAP_NEAR_BAND_PCT hasn't been optimized recently. With such proven selectivity, reducing from 0.90% to 0.85% should narrow the neutral zone and allow price deviations of 0.85%-0.90% to contribute directional signals, potentially improving signal frequency and total returns (20% fitness weight) while the exceptional win rate provides cushion.
-# CHANGE: Reduce VWAP_NEAR_BAND_PCT from 0.90% to 0.85%
+# EXPERIMENT: vwap_deviation_multiplier_reduce
+# HYPOTHESIS: Current fitness=10.0740 with exceptional 91.3% win rate shows outstanding signal quality. Most core parameters have reached diminishing returns through extensive testing. The VWAP deviation scoring multiplier (currently 10.0 in "vwap_score = min(100.0, 60.0 + dev * 10.0)") hasn't been successfully optimized. With such proven selectivity, reducing from 10.0 to 9.0 should make VWAP deviation scoring less aggressive, preventing over-confidence on extreme deviations and improving risk-adjusted ratios (Sharpe 35% + Sortino 25% = 60% fitness weight) by making signals more selective without disrupting the proven 91.3% win rate foundation.
+# CHANGE: Reduce VWAP deviation scoring multiplier from 10.0 to 9.0 in both bull and bear VWAP component calculations
 
 """
 Pure-Python intraday day trading strategy — NO LLM calls.
@@ -19,9 +19,9 @@ from typing import Literal
 # ---------------------------------------------------------------------------
 # Experiment metadata (updated by the evolution agent each iteration)
 # ---------------------------------------------------------------------------
-EXPERIMENT_NAME = "vwap_threshold_tighten"
-EXPERIMENT_HYPOTHESIS = "Current fitness=10.0740 with exceptional 91.3% win rate shows outstanding signal quality. Most core parameters have reached diminishing returns through extensive testing. VWAP component has significant 30% confidence weight (second highest) but VWAP_NEAR_BAND_PCT hasn't been optimized recently. With such proven selectivity, reducing from 0.90% to 0.85% should narrow the neutral zone and allow price deviations of 0.85%-0.90% to contribute directional signals, potentially improving signal frequency and total returns (20% fitness weight) while the exceptional win rate provides cushion."
-EXPERIMENT_CHANGE = "Reduce VWAP_NEAR_BAND_PCT from 0.90% to 0.85%"
+EXPERIMENT_NAME = "vwap_deviation_multiplier_reduce"
+EXPERIMENT_HYPOTHESIS = "Current fitness=10.0740 with exceptional 91.3% win rate shows outstanding signal quality. Most core parameters have reached diminishing returns through extensive testing. The VWAP deviation scoring multiplier (currently 10.0 in 'vwap_score = min(100.0, 60.0 + dev * 10.0)') hasn't been successfully optimized. With such proven selectivity, reducing from 10.0 to 9.0 should make VWAP deviation scoring less aggressive, preventing over-confidence on extreme deviations and improving risk-adjusted ratios (Sharpe 35% + Sortino 25% = 60% fitness weight) by making signals more selective without disrupting the proven 91.3% win rate foundation."
+EXPERIMENT_CHANGE = "Reduce VWAP deviation scoring multiplier from 10.0 to 9.0 in both bull and bear VWAP component calculations"
 
 # ---------------------------------------------------------------------------
 # Tunable parameters — agent may change any of these
@@ -279,10 +279,10 @@ def _ticker_signal(
         dev = abs(price_vs_vwap_pct)
         if price_vs_vwap_pct > VWAP_NEAR_BAND_PCT:
             # Price above VWAP — bullish; more above = more conviction (up to extended)
-            vwap_score = min(100.0, 60.0 + dev * 10.0)
+            vwap_score = min(100.0, 60.0 + dev * 9.0)
             bull_score += CONF_WEIGHT_VWAP * vwap_score
         elif price_vs_vwap_pct < -VWAP_NEAR_BAND_PCT:
-            vwap_score = min(100.0, 60.0 + dev * 10.0)
+            vwap_score = min(100.0, 60.0 + dev * 9.0)
             bear_score += CONF_WEIGHT_VWAP * vwap_score
         # Near-VWAP zone → no strong directional signal
 
