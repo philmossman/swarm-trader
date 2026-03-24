@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Market Intel Exchange — Cassius ↔ DROX
+Market Intel Exchange — peer signal sharing between two swarm-trader instances
 Shares research signals via A2A, never positions or decisions.
 """
 
@@ -12,17 +12,22 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 
-# Glorft/DROX A2A config
-GLORFT_URL = "http://100.106.81.19:9092/a2a/tasks/send"
-GLORFT_TOKEN = "An9U8IkH28WoeVDTs3zFrhEzBlrGo1IM"
+# Import mode config for context
+from src.config import get_mode_config, resolve_mode
 
-# Mordecai A2A config (for receiving)
-MORDECAI_URL = "http://localhost:9092/a2a/tasks/send"
-MORDECAI_TOKEN = "6OFUpWpl5sQZ8KUxDIJ0Kzxykoj4I"
+# Peer A2A config — loaded from environment variables
+PEER_URL = os.getenv("PEER_A2A_URL", "http://localhost:9092/a2a/tasks/send")
+PEER_TOKEN = os.getenv("PEER_A2A_TOKEN", "")
 
 
-def build_intel_packet(data_file: str, packet_type: str = "daily-brief") -> dict:
+def build_intel_packet(data_file: str, packet_type: str = "daily-brief", mode: str = None) -> dict:
     """Build an intel packet from gather_data.py output. Strips all position/portfolio data."""
+    
+    # Resolve mode for context
+    if mode is None:
+        mode = resolve_mode()
+        if mode == "auto":
+            mode = "swing"  # Fallback
     
     with open(data_file) as f:
         data = json.load(f)
@@ -113,9 +118,10 @@ def build_intel_packet(data_file: str, packet_type: str = "daily-brief") -> dict
         macro_sentiment = "risk-off"
     
     packet = {
-        "from": "cassius",
+        "from": os.getenv("SWARM_AGENT_NAME", "swarm-agent"),
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "type": packet_type,
+        "trading_mode": mode,  # Include current mode for context
         "tickers_watching": tickers_watching,
         "signals": signals,
         "macro": {
@@ -130,12 +136,12 @@ def build_intel_packet(data_file: str, packet_type: str = "daily-brief") -> dict
     return packet
 
 
-def send_intel(packet: dict, target: str = "drox") -> dict:
-    """Send intel packet to DROX via Glorft's A2A endpoint."""
-    
+def send_intel(packet: dict, target: str = "peer") -> dict:
+    """Send intel packet to peer instance via A2A."""
+
     # Format as readable message for the receiving agent
     msg_lines = [
-        f"📡 MARKET INTEL from Cassius ({packet['type']})",
+        f"📡 MARKET INTEL from {packet['from']} ({packet['type']})",
         f"Timestamp: {packet['timestamp']}",
         f"Macro: {packet['macro']['sentiment']}" + (f" (SPY {packet['macro']['spy_change_1d']:+.1f}%)" if packet['macro'].get('spy_change_1d') else ""),
         "",
@@ -170,18 +176,18 @@ def send_intel(packet: dict, target: str = "drox") -> dict:
                 "parts": [{"type": "text", "text": message_text}]
             },
             "metadata": {
-                "skillId": "trading" if target == "drox" else "general",
+                "skillId": "trading",
                 "intel_packet": True
             }
         }
     }
-    
+
     data = json.dumps(payload).encode()
     req = urllib.request.Request(
-        GLORFT_URL,
+        PEER_URL,
         data=data,
         headers={
-            "Authorization": f"Bearer {GLORFT_TOKEN}",
+            "Authorization": f"Bearer {PEER_TOKEN}",
             "Content-Type": "application/json"
         },
         method="POST"
@@ -197,13 +203,15 @@ def send_intel(packet: dict, target: str = "drox") -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description="Market Intel Exchange")
-    parser.add_argument("--data", default="/tmp/cassius-market-data.json",
+    parser.add_argument("--data", default="/tmp/swarm-market-data.json",
                        help="Path to gather_data.py output")
     parser.add_argument("--type", default="daily-brief",
                        choices=["daily-brief", "anomaly", "sector-signal", "evening-debrief"],
                        help="Intel packet type")
-    parser.add_argument("--target", default="drox", choices=["drox", "glorft"],
-                       help="Target agent")
+    parser.add_argument("--mode", choices=["swing", "day"],
+                       help="Trading mode for context (default: auto-resolve)")
+    parser.add_argument("--target", default="peer",
+                       help="Target agent name (label only, used in output)")
     parser.add_argument("--dry-run", action="store_true",
                        help="Print packet without sending")
     parser.add_argument("--json", action="store_true",
@@ -216,7 +224,7 @@ def main():
         print("Run gather_data.py first to generate market data.")
         sys.exit(1)
     
-    packet = build_intel_packet(args.data, args.type)
+    packet = build_intel_packet(args.data, args.type, mode=args.mode)
     
     if args.json:
         print(json.dumps(packet, indent=2))

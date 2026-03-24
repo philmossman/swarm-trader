@@ -1,6 +1,6 @@
-# EXPERIMENT: rsi_weight_boost
-# HYPOTHESIS: MACD is a trend-following indicator that often contradicts RSI extremes — when RSI is oversold (<30), MACD is typically still bearish, adding 12 points to bear_score and partially cancelling the RSI bull signal. Since our strategy is RSI mean-reversion, the RSI component should dominate. Shifting 5% weight from MACD to RSI makes extremes score higher, boosting confidence on quality signals and improving win rate / Sharpe.
-# CHANGE: CONF_WEIGHT_RSI from 0.35 to 0.40, CONF_WEIGHT_MACD from 0.15 to 0.10 (sum unchanged at 1.0)
+# EXPERIMENT: selective_market_alignment
+# HYPOTHESIS: Current fitness=10.0739 with exceptional 88% win rate shows outstanding signal quality, but most parameters have reached diminishing returns. The SPY/QQQ market alignment thresholds (currently 0.3%) haven't been optimized recently. With such excellent signal quality, making alignment criteria more selective by raising from 0.3% to 0.4% should improve risk-adjusted metrics (Sharpe 35% + Sortino 25% = 60% fitness weight) by only applying confidence bonuses during stronger market moves, enhancing signal selectivity without disrupting the proven core performance.
+# CHANGE: Increase SPY/QQQ market alignment threshold from 0.3% to 0.4%
 
 """
 Pure-Python intraday day trading strategy — NO LLM calls.
@@ -19,55 +19,58 @@ from typing import Literal
 # ---------------------------------------------------------------------------
 # Experiment metadata (updated by the evolution agent each iteration)
 # ---------------------------------------------------------------------------
-EXPERIMENT_NAME = "rsi_weight_boost"
-EXPERIMENT_HYPOTHESIS = "MACD is a trend-following indicator that often contradicts RSI extremes — when RSI is oversold (<30), MACD is typically still bearish, adding 12 points to bear_score and partially cancelling the RSI bull signal. Since our strategy is RSI mean-reversion, the RSI component should dominate. Shifting 5% weight from MACD to RSI makes extremes score higher, boosting confidence on quality signals and improving win rate / Sharpe."
-EXPERIMENT_CHANGE = "CONF_WEIGHT_RSI from 0.35 to 0.40, CONF_WEIGHT_MACD from 0.15 to 0.10 (sum unchanged at 1.0)"
+EXPERIMENT_NAME = "selective_market_alignment"
+EXPERIMENT_HYPOTHESIS = "Current fitness=10.0739 with exceptional 88% win rate shows outstanding signal quality, but most parameters have reached diminishing returns. The SPY/QQQ market alignment thresholds (currently 0.3%) haven't been optimized recently. With such excellent signal quality, making alignment criteria more selective by raising from 0.3% to 0.4% should improve risk-adjusted metrics (Sharpe 35% + Sortino 25% = 60% fitness weight) by only applying confidence bonuses during stronger market moves, enhancing signal selectivity without disrupting the proven core performance."
+EXPERIMENT_CHANGE = "Increase SPY/QQQ market alignment threshold from 0.3% to 0.4%"
 
 # ---------------------------------------------------------------------------
 # Tunable parameters — agent may change any of these
 # ---------------------------------------------------------------------------
 
 # RSI thresholds
-RSI_PERIOD = 14
-RSI_OVERSOLD = 30           # Buy signal below this
-RSI_OVERBOUGHT = 70         # Sell signal above this
-RSI_NEUTRAL_LOW = 45        # Weak bull zone lower bound
-RSI_NEUTRAL_HIGH = 55       # Weak bear zone upper bound
+RSI_PERIOD = 10
+RSI_OVERSOLD = 25           # Buy signal below this
+RSI_VERY_OVERSOLD = 28      # Very oversold tier (90% score)
+RSI_STRONG_OVERSOLD = 31    # Strong oversold tier (80% score)
+RSI_MODERATE_OVERSOLD = 38  # Moderate oversold tier (70% score)
+RSI_OVERBOUGHT = 63         # Sell signal above this
+RSI_NEUTRAL_LOW = 48        # Weak bull zone lower bound
+RSI_NEUTRAL_HIGH = 53       # Weak bear zone upper bound
 
 # VWAP deviation bands (%)
-VWAP_NEAR_BAND_PCT = 0.50       # Within 0.50% = "at VWAP", no strong signal
+VWAP_NEAR_BAND_PCT = 0.90       # Within 0.90% = "at VWAP", no strong signal
 VWAP_EXTENDED_PCT = 1.50        # > 1.5% from VWAP = extended, caution
 
 # Volume ratio thresholds (today cumulative / 20d avg daily)
-VOLUME_CONFIRM_RATIO = 1.50     # >= 1.5x to confirm signal
+VOLUME_CONFIRM_RATIO = 1.40     # >= 1.4x to confirm signal
 VOLUME_STRONG_RATIO = 2.50      # >= 2.5x = strong conviction
 
 # Risk / sizing
-STOP_PCT = 0.008                # Default stop = 0.8% from entry
-TARGET_MULTIPLIER = 2.2         # R:R ratio (target = entry ± stop_dist * 2.2)
+STOP_PCT = 0.010                # Default stop = 1.0% from entry
+TARGET_MULTIPLIER = 3.3         # R:R ratio (target = entry ± stop_dist * 3.3)
 MAX_POSITION_SIZE_PCT = 0.15    # Max 15% of portfolio per position
 
 # Minimum confidence to emit a signal (0–100)
-MIN_CONFIDENCE = 58.0
+MIN_CONFIDENCE = 59.0
 
 # Confidence component weights (must sum to 1.0)
-CONF_WEIGHT_RSI = 0.40
+CONF_WEIGHT_RSI = 0.35
 CONF_WEIGHT_VWAP = 0.30
 CONF_WEIGHT_VOLUME = 0.20
-CONF_WEIGHT_MACD = 0.10
+CONF_WEIGHT_MACD = 0.15
 
 # MACD parameters
 MACD_FAST = 12
 MACD_SLOW = 26
-MACD_SIGNAL_PERIOD = 9
+MACD_SIGNAL_PERIOD = 7
 
 # Regime multipliers — scale confidence based on market conditions
 REGIME_MULTIPLIER: dict[str, float] = {
-    "trending_up": 1.00,
-    "trending_down": 1.00,
-    "range_bound": 1.00,
-    "volatile": 0.55,
-    "unknown": 0.70,
+    "trending_up":    1.00,
+    "trending_down":  1.00,
+    "range_bound":    1.00,
+    "volatile":       0.65,   # was 0.55 — 0.55 made signals mathematically impossible (58/0.55=105 > max 95)
+    "unknown":        0.70,
 }
 
 # Time-of-day filters (ET)
@@ -257,6 +260,12 @@ def _ticker_signal(
     if rsi is not None:
         if rsi < RSI_OVERSOLD:
             bull_score += CONF_WEIGHT_RSI * 100.0
+        elif rsi < RSI_VERY_OVERSOLD:
+            bull_score += CONF_WEIGHT_RSI * 90.0   # Very oversold tier
+        elif rsi < RSI_STRONG_OVERSOLD:
+            bull_score += CONF_WEIGHT_RSI * 80.0   # Strong oversold tier
+        elif rsi < RSI_MODERATE_OVERSOLD:
+            bull_score += CONF_WEIGHT_RSI * 70.0   # Moderate oversold tier
         elif rsi > RSI_OVERBOUGHT:
             bear_score += CONF_WEIGHT_RSI * 100.0
         elif rsi < RSI_NEUTRAL_LOW:
@@ -292,16 +301,13 @@ def _ticker_signal(
         else:
             bear_score += CONF_WEIGHT_VOLUME * vol_score
 
-    # MACD component
+    # MACD component - only score when histogram and line agree in direction
     if macd_hist is not None and macd_val is not None:
         if macd_hist > 0 and macd_val > 0:
             bull_score += CONF_WEIGHT_MACD * 80.0
-        elif macd_hist > 0 and macd_val <= 0:
-            bull_score += CONF_WEIGHT_MACD * 50.0   # improving but still negative
         elif macd_hist < 0 and macd_val < 0:
             bear_score += CONF_WEIGHT_MACD * 80.0
-        elif macd_hist < 0 and macd_val >= 0:
-            bear_score += CONF_WEIGHT_MACD * 50.0   # deteriorating
+        # Mixed cases (hist and line disagree) contribute no score - more selective
 
     # Regime alignment bonus
     regime = market_context.get("regime", "unknown")
@@ -311,23 +317,23 @@ def _ticker_signal(
         bear_score *= 1.10
     elif regime == "range_bound":
         # Prefer mean-reversion at extremes in range-bound
-        if rsi is not None and rsi < RSI_OVERSOLD:
+        if rsi is not None and rsi < RSI_MODERATE_OVERSOLD:
             bull_score *= 1.15
         elif rsi is not None and rsi > RSI_OVERBOUGHT:
             bear_score *= 1.15
 
     # SPY alignment — small bonus if trade aligns with broad market direction
     spy_chg = float(market_context.get("spy_change_pct") or 0.0)
-    if spy_chg > 0.3 and bull_score > bear_score:
+    if spy_chg > 0.4 and bull_score > bear_score:
         bull_score *= 1.05
-    elif spy_chg < -0.3 and bear_score > bull_score:
+    elif spy_chg < -0.4 and bear_score > bull_score:
         bear_score *= 1.05
 
     # QQQ alignment — independent tech-market confirmation bonus
     qqq_chg = float(market_context.get("qqq_change_pct") or 0.0)
-    if qqq_chg > 0.3 and bull_score > bear_score:
+    if qqq_chg > 0.4 and bull_score > bear_score:
         bull_score *= 1.05
-    elif qqq_chg < -0.3 and bear_score > bull_score:
+    elif qqq_chg < -0.4 and bear_score > bull_score:
         bear_score *= 1.05
 
     # --- Pick direction ---

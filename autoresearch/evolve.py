@@ -25,19 +25,20 @@ Abort conditions:
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
-import shlex
+import re
 import shutil
 import subprocess
 import sys
 import textwrap
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import ast
 import httpx
 from dotenv import load_dotenv
 
@@ -219,8 +220,7 @@ def _run_agent_claude(prompt: str, quiet: bool = False) -> tuple[bool, str]:
 
     Returns (success, output_or_error).
     """
-    import re as _re
-
+    # Check API key before logging — avoid printing misleading progress if key is missing
     api_key = os.environ.get("OPENROUTER_API_KEY", "")
     if not api_key:
         return False, "OPENROUTER_API_KEY not set in environment"
@@ -236,47 +236,77 @@ def _run_agent_claude(prompt: str, quiet: bool = False) -> tuple[bool, str]:
     }
     payload = {
         "model": "anthropic/claude-sonnet-4-5",
-        "max_tokens": 8192,
+        # strategy.py is ~300 lines (~5k tokens). 16k gives the model room to
+        # reason and return the full file without truncation.
+        "max_tokens": 16000,
         "messages": [
             {"role": "user", "content": prompt},
         ],
     }
 
-    try:
-        response = httpx.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=AGENT_TIMEOUT_SEC,
-        )
-        response.raise_for_status()
-        data = response.json()
-        content = data["choices"][0]["message"]["content"]
-    except httpx.TimeoutException:
-        return False, f"Agent timed out after {AGENT_TIMEOUT_SEC}s"
-    except httpx.HTTPStatusError as e:
-        # Don't expose response body for auth errors — could contain token echoes
-        if e.response.status_code in (401, 403):
-            return False, f"OpenRouter API error {e.response.status_code}: authentication failed"
-        return False, f"OpenRouter API error {e.response.status_code}"
-    except (KeyError, IndexError) as e:
-        return False, f"Unexpected API response structure: {e}"
-    except Exception as e:
-        return False, f"Agent error: {e}"
+    # Retry up to 3 attempts with exponential backoff for transient 429/5xx errors.
+    last_error: str = ""
+    for attempt in range(3):
+        try:
+            response = httpx.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=AGENT_TIMEOUT_SEC,
+            )
+            response.raise_for_status()
+            data = response.json()
+            choice = data["choices"][0]
+            content = choice["message"]["content"]
 
-    # Parse the ```python ... ``` code block — take the longest block in case of
-    # multiple blocks (e.g. illustrative snippets before the full file).
-    blocks = _re.findall(r"```python\s*\n(.*?)```", content, _re.DOTALL)
+            # Check for truncation — a truncated response will produce broken Python.
+            finish_reason = choice.get("finish_reason", "")
+            if finish_reason == "length":
+                return False, (
+                    "OpenRouter response truncated (finish_reason='length'). "
+                    "The model hit max_tokens before finishing. strategy.py NOT modified. "
+                    "Consider increasing max_tokens or simplifying the strategy."
+                )
+            break  # success — exit retry loop
+
+        except httpx.TimeoutException:
+            return False, f"Agent timed out after {AGENT_TIMEOUT_SEC}s"
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            if status in (401, 403):
+                return False, f"OpenRouter API error {status}: authentication failed"
+            last_error = f"OpenRouter API error {status}"
+            if attempt < 2 and status in (429, 500, 502, 503, 504):
+                wait = 2 ** attempt  # 1s, 2s
+                if not quiet:
+                    print(f"  [agent] {last_error} — retrying in {wait}s (attempt {attempt+1}/3)...", file=sys.stderr)
+                time.sleep(wait)
+                continue
+            return False, last_error
+        except (KeyError, IndexError) as e:
+            return False, f"Unexpected API response structure: {e}"
+        except Exception as e:
+            return False, f"Agent error: {e}"
+    else:
+        return False, f"OpenRouter API failed after 3 attempts: {last_error}"
+
+    # Parse the ```python ... ``` code block from the response.
+    # Find ALL python code blocks and take the longest (most likely the full file),
+    # avoiding mis-matches on illustrative snippets before the main block.
+    blocks = re.findall(r"```python\s*\n(.*?)```", content, re.DOTALL)
     if not blocks:
-        # Fallback: plain ``` blocks
-        blocks = _re.findall(r"```\s*\n(.*?)```", content, _re.DOTALL)
+        # Fallback: try plain ``` block
+        plain_blocks = re.findall(r"```\s*\n(.*?)```", content, re.DOTALL)
+        if not plain_blocks:
+            return False, f"No ```python code block found in model response. Response preview: {content[:300]}"
+        new_strategy_code = max(plain_blocks, key=len)
+    else:
+        new_strategy_code = max(blocks, key=len)
 
-    if not blocks:
-        return False, f"No python code block found in model response. Response preview: {content[:300]}"
-
-    new_strategy_code = max(blocks, key=len)  # longest block = most likely the full file
-
-    # Validate syntax BEFORE writing — a malformed response must not corrupt strategy.py
+    # Validate syntax BEFORE writing — never overwrite strategy.py with broken code.
+    # Note: the main loop also calls _syntax_check() (py_compile) after agent returns,
+    # which catches additional issues (encoding, future imports). Both checks are kept
+    # deliberately: this one guards the write, the outer one guards the backtest.
     try:
         ast.parse(new_strategy_code)
     except SyntaxError as e:

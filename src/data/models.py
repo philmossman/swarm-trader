@@ -74,6 +74,18 @@ class LineItem(BaseModel):
     # Allow additional fields dynamically
     model_config = {"extra": "allow"}
 
+    def __getattr__(self, name: str):
+        """Return None for missing extra fields instead of raising AttributeError.
+
+        SEC EDGAR doesn't always return all fields (e.g. capital_expenditure,
+        operating_margin) depending on the company's XBRL filings. This makes
+        all agent code resilient to partial data without per-access checks.
+        """
+        try:
+            return super().__getattribute__(name)
+        except AttributeError:
+            return None
+
 
 class LineItemResponse(BaseModel):
     search_results: list[LineItem]
@@ -102,7 +114,7 @@ class InsiderTradeResponse(BaseModel):
 class CompanyNews(BaseModel):
     ticker: str
     title: str
-    author: str
+    author: str | None = None
     source: str
     date: str
     url: str

@@ -16,6 +16,7 @@ Usage:
   poetry run python gather_data.py --include-universe     # Holdings + full universe
   poetry run python gather_data.py --top 8               # Top 8 by value
 """
+from __future__ import annotations
 
 import argparse
 import json
@@ -29,26 +30,35 @@ load_dotenv()
 
 import requests
 
-from src.config import (
-    UNIVERSE_SIMPLE as UNIVERSE,
-    ALL_UNIVERSE_TICKERS as ALL_UNIVERSE,
-    ALL_DAY_TRADE_TICKERS,
-    DAY_TRADE_UNIVERSE,
-)
+from src.config import get_mode_config, resolve_mode
 
 # Alpaca trading API
 API_BASE = "https://paper-api.alpaca.markets/v2"
 # Alpaca market data API (separate base URL)
 DATA_BASE = "https://data.alpaca.markets/v2"
 
-HEADERS = {
-    "APCA-API-KEY-ID": os.environ.get("ALPACA_API_KEY", ""),
-    "APCA-API-SECRET-KEY": os.environ.get("ALPACA_API_SECRET", ""),
-}
+def _alpaca_headers(mode: str = None) -> dict:
+    """Return Alpaca API headers for the given mode (swing/day)."""
+    if mode == "swing":
+        return {
+            "APCA-API-KEY-ID": os.environ.get("ALPACA_SWING_API_KEY", ""),
+            "APCA-API-SECRET-KEY": os.environ.get("ALPACA_SWING_API_SECRET", ""),
+        }
+    # Default / day mode uses the original keys
+    return {
+        "APCA-API-KEY-ID": os.environ.get("ALPACA_API_KEY", ""),
+        "APCA-API-SECRET-KEY": os.environ.get("ALPACA_API_SECRET", ""),
+    }
 
+# Keep HEADERS as default for backwards compat (market data calls, etc.)
+HEADERS = _alpaca_headers()
 
-def alpaca_get(endpoint, base=API_BASE, params=None):
-    r = requests.get(f"{base}/{endpoint}", headers=HEADERS, params=params, timeout=15)
+# Module-level active mode — set by main() before any portfolio calls
+_active_mode: str = "swing"
+
+def alpaca_get(endpoint, base=API_BASE, params=None, mode=None):
+    headers = _alpaca_headers(mode or _active_mode) if base == API_BASE else _alpaca_headers(_active_mode)
+    r = requests.get(f"{base}/{endpoint}", headers=headers, params=params, timeout=15)
     r.raise_for_status()
     return r.json()
 
@@ -57,8 +67,13 @@ def alpaca_get(endpoint, base=API_BASE, params=None):
 # Portfolio state (shared between modes)
 # ---------------------------------------------------------------------------
 
-def get_portfolio_state():
+def get_portfolio_state(mode: str = "swing"):
     """Get account + positions from Alpaca."""
+    mode_config = get_mode_config(mode)
+    universe = mode_config["universe"]
+    category_map = {cat_key: cat_data["tickers"] for cat_key, cat_data in universe.items()}
+    all_universe = {t for tickers in category_map.values() for t in tickers}
+
     account = alpaca_get("account")
     positions = alpaca_get("positions")
 
@@ -73,8 +88,8 @@ def get_portfolio_state():
             "current_price": float(p.get("current_price", 0)),
             "unrealized_pl": float(p.get("unrealized_pl", 0)),
             "unrealized_plpc": float(p.get("unrealized_plpc", 0)),
-            "in_universe": symbol in ALL_UNIVERSE,
-            "category": next((cat for cat, tickers in UNIVERSE.items() if symbol in tickers), "legacy"),
+            "in_universe": symbol in all_universe,
+            "category": next((cat for cat, tickers in category_map.items() if symbol in tickers), "legacy"),
         })
 
     equity = float(account.get("equity", 0))
@@ -400,9 +415,18 @@ def main():
         },
     }
 
+    # Set active mode for API routing
+    global _active_mode
+    _active_mode = args.mode
+
+    # Load mode config for universe tickers
+    mode_config = get_mode_config(args.mode)
+    universe = mode_config["universe"]
+    universe_tickers = [t for cat_data in universe.values() for t in cat_data["tickers"]]
+
     # Portfolio state
     print("📡 Fetching portfolio state...", file=sys.stderr)
-    payload["portfolio"] = get_portfolio_state()
+    payload["portfolio"] = get_portfolio_state(mode=args.mode)
 
     # Determine tickers
     if args.tickers:
@@ -414,7 +438,6 @@ def main():
         tickers = held
 
     if args.include_universe:
-        universe_tickers = ALL_DAY_TRADE_TICKERS if args.mode == "day" else ALL_UNIVERSE
         for t in universe_tickers:
             if t not in tickers:
                 tickers.append(t)
