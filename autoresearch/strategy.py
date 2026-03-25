@@ -1,6 +1,6 @@
-# EXPERIMENT: vwap_deviation_multiplier_reduce
-# HYPOTHESIS: Current fitness=10.0740 with exceptional 91.3% win rate shows outstanding signal quality. Most core parameters have reached diminishing returns through extensive testing. The VWAP deviation scoring multiplier (currently 10.0 in "vwap_score = min(100.0, 60.0 + dev * 10.0)") hasn't been successfully optimized. With such proven selectivity, reducing from 10.0 to 9.0 should make VWAP deviation scoring less aggressive, preventing over-confidence on extreme deviations and improving risk-adjusted ratios (Sharpe 35% + Sortino 25% = 60% fitness weight) by making signals more selective without disrupting the proven 91.3% win rate foundation.
-# CHANGE: Reduce VWAP deviation scoring multiplier from 10.0 to 9.0 in both bull and bear VWAP component calculations
+# EXPERIMENT: target_multiplier_increase
+# HYPOTHESIS: Current fitness=4.9649 with 63.16% win rate and 19 trades shows moderate performance. All 10 recent experiments failed trying to modify VWAP, RSI, MACD, MIN_CONFIDENCE, or volume thresholds. The TARGET_MULTIPLIER of 3.3 determines the risk-reward ratio. With a proven 63%+ win rate, the strategy has good directional accuracy but may be leaving profits on the table by taking profits too early. Increasing TARGET_MULTIPLIER from 3.3 to 3.6 allows winners to run further, improving total return (20% fitness weight) and profit factor (10% fitness weight) by capturing larger wins while the stop_price remains unchanged to protect against losses. The 0.3 increase (9% wider targets) should meaningfully improve average win size without compromising the proven win rate foundation.
+# CHANGE: Increase TARGET_MULTIPLIER from 3.3 to 3.6 to allow winners to run further and improve profit factor
 
 """
 Pure-Python intraday day trading strategy — NO LLM calls.
@@ -19,9 +19,9 @@ from typing import Literal
 # ---------------------------------------------------------------------------
 # Experiment metadata (updated by the evolution agent each iteration)
 # ---------------------------------------------------------------------------
-EXPERIMENT_NAME = "vwap_deviation_multiplier_reduce"
-EXPERIMENT_HYPOTHESIS = "Current fitness=10.0740 with exceptional 91.3% win rate shows outstanding signal quality. Most core parameters have reached diminishing returns through extensive testing. The VWAP deviation scoring multiplier (currently 10.0 in 'vwap_score = min(100.0, 60.0 + dev * 10.0)') hasn't been successfully optimized. With such proven selectivity, reducing from 10.0 to 9.0 should make VWAP deviation scoring less aggressive, preventing over-confidence on extreme deviations and improving risk-adjusted ratios (Sharpe 35% + Sortino 25% = 60% fitness weight) by making signals more selective without disrupting the proven 91.3% win rate foundation."
-EXPERIMENT_CHANGE = "Reduce VWAP deviation scoring multiplier from 10.0 to 9.0 in both bull and bear VWAP component calculations"
+EXPERIMENT_NAME = "target_multiplier_increase"
+EXPERIMENT_HYPOTHESIS = "Current fitness=4.9649 with 63.16% win rate and 19 trades shows moderate performance. All 10 recent experiments failed trying to modify VWAP, RSI, MACD, MIN_CONFIDENCE, or volume thresholds. The TARGET_MULTIPLIER of 3.3 determines the risk-reward ratio. With a proven 63%+ win rate, the strategy has good directional accuracy but may be leaving profits on the table by taking profits too early. Increasing TARGET_MULTIPLIER from 3.3 to 3.6 allows winners to run further, improving total return (20% fitness weight) and profit factor (10% fitness weight) by capturing larger wins while the stop_price remains unchanged to protect against losses. The 0.3 increase (9% wider targets) should meaningfully improve average win size without compromising the proven win rate foundation."
+EXPERIMENT_CHANGE = "Increase TARGET_MULTIPLIER from 3.3 to 3.6 to allow winners to run further and improve profit factor"
 
 # ---------------------------------------------------------------------------
 # Tunable parameters — agent may change any of these
@@ -47,7 +47,7 @@ VOLUME_STRONG_RATIO = 2.50      # >= 2.5x = strong conviction
 
 # Risk / sizing
 STOP_PCT = 0.010                # Default stop = 1.0% from entry
-TARGET_MULTIPLIER = 3.3         # R:R ratio (target = entry ± stop_dist * 3.3)
+TARGET_MULTIPLIER = 3.6         # R:R ratio (target = entry ± stop_dist * 3.6)
 MAX_POSITION_SIZE_PCT = 0.15    # Max 15% of portfolio per position
 
 # Minimum confidence to emit a signal (0–100)
