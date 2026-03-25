@@ -1,6 +1,6 @@
-# EXPERIMENT: target_multiplier_increase
-# HYPOTHESIS: Current fitness=4.9649 with 63.16% win rate and 19 trades shows moderate performance. All 10 recent experiments failed trying to modify VWAP, RSI, MACD, MIN_CONFIDENCE, or volume thresholds. The TARGET_MULTIPLIER of 3.3 determines the risk-reward ratio. With a proven 63%+ win rate, the strategy has good directional accuracy but may be leaving profits on the table by taking profits too early. Increasing TARGET_MULTIPLIER from 3.3 to 3.6 allows winners to run further, improving total return (20% fitness weight) and profit factor (10% fitness weight) by capturing larger wins while the stop_price remains unchanged to protect against losses. The 0.3 increase (9% wider targets) should meaningfully improve average win size without compromising the proven win rate foundation.
-# CHANGE: Increase TARGET_MULTIPLIER from 3.3 to 3.6 to allow winners to run further and improve profit factor
+# EXPERIMENT: reduce_macd_signal_period
+# HYPOTHESIS: Current fitness=5.8586 with 66.67% win rate and 18 trades from TARGET_MULTIPLIER=3.6 shows strong performance. Recent experiments tried MIN_CONFIDENCE, STOP_PCT, volume thresholds, and RSI adjustments but all reverted. The MACD_SIGNAL_PERIOD of 7 determines the signal line EMA smoothing. A longer signal period (7) creates lag in detecting momentum shifts, potentially causing the strategy to enter after optimal timing or miss early momentum confirmation. Decreasing MACD_SIGNAL_PERIOD from 7 to 5 makes the signal line more responsive to MACD line changes, allowing faster detection of histogram crossovers when both line and histogram agree in direction (our MACD scoring condition). This should improve risk-adjusted ratios (Sharpe 35% + Sortino 25% = 60% fitness weight) by capturing momentum earlier with better entry timing, helping reach the extended 3.6x targets more reliably without changing trade frequency dramatically.
+# CHANGE: Decrease MACD_SIGNAL_PERIOD from 7 to 5 for faster momentum confirmation
 
 """
 Pure-Python intraday day trading strategy — NO LLM calls.
@@ -19,9 +19,9 @@ from typing import Literal
 # ---------------------------------------------------------------------------
 # Experiment metadata (updated by the evolution agent each iteration)
 # ---------------------------------------------------------------------------
-EXPERIMENT_NAME = "target_multiplier_increase"
-EXPERIMENT_HYPOTHESIS = "Current fitness=4.9649 with 63.16% win rate and 19 trades shows moderate performance. All 10 recent experiments failed trying to modify VWAP, RSI, MACD, MIN_CONFIDENCE, or volume thresholds. The TARGET_MULTIPLIER of 3.3 determines the risk-reward ratio. With a proven 63%+ win rate, the strategy has good directional accuracy but may be leaving profits on the table by taking profits too early. Increasing TARGET_MULTIPLIER from 3.3 to 3.6 allows winners to run further, improving total return (20% fitness weight) and profit factor (10% fitness weight) by capturing larger wins while the stop_price remains unchanged to protect against losses. The 0.3 increase (9% wider targets) should meaningfully improve average win size without compromising the proven win rate foundation."
-EXPERIMENT_CHANGE = "Increase TARGET_MULTIPLIER from 3.3 to 3.6 to allow winners to run further and improve profit factor"
+EXPERIMENT_NAME = "reduce_macd_signal_period"
+EXPERIMENT_HYPOTHESIS = "Current fitness=5.8586 with 66.67% win rate and 18 trades from TARGET_MULTIPLIER=3.6 shows strong performance. Recent experiments tried MIN_CONFIDENCE, STOP_PCT, volume thresholds, and RSI adjustments but all reverted. The MACD_SIGNAL_PERIOD of 7 determines the signal line EMA smoothing. A longer signal period (7) creates lag in detecting momentum shifts, potentially causing the strategy to enter after optimal timing or miss early momentum confirmation. Decreasing MACD_SIGNAL_PERIOD from 7 to 5 makes the signal line more responsive to MACD line changes, allowing faster detection of histogram crossovers when both line and histogram agree in direction (our MACD scoring condition). This should improve risk-adjusted ratios (Sharpe 35% + Sortino 25% = 60% fitness weight) by capturing momentum earlier with better entry timing, helping reach the extended 3.6x targets more reliably without changing trade frequency dramatically."
+EXPERIMENT_CHANGE = "Decrease MACD_SIGNAL_PERIOD from 7 to 5 for faster momentum confirmation"
 
 # ---------------------------------------------------------------------------
 # Tunable parameters — agent may change any of these
@@ -62,7 +62,7 @@ CONF_WEIGHT_MACD = 0.15
 # MACD parameters
 MACD_FAST = 12
 MACD_SLOW = 26
-MACD_SIGNAL_PERIOD = 7
+MACD_SIGNAL_PERIOD = 5
 
 # Regime multipliers — scale confidence based on market conditions
 REGIME_MULTIPLIER: dict[str, float] = {
