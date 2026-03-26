@@ -1,6 +1,6 @@
-# EXPERIMENT: decrease_min_confidence_to_57
-# HYPOTHESIS: Current fitness=8.3296 with 73.68% win rate and 19 trades shows excellent performance from RSI_OVERBOUGHT=66 and TARGET_MULTIPLIER=3.6. Looking at experiment history, MIN_CONFIDENCE=60.0 achieved fitness=7.2859 with 21 trades and 61.9% win rate, which was actually higher than the 6.0463 baseline it was compared against. The current MIN_CONFIDENCE=59.0 produces 19 trades with 73.68% win rate. The high win rate (73.68%) suggests the signal quality is strong, and the strategy is successfully identifying profitable setups. Decreasing MIN_CONFIDENCE from 59.0 to 57.0 should increase trade frequency from 19 to approximately 22-25 trades by allowing slightly lower-confidence signals through, while the proven signal logic (RSI_OVERBOUGHT=66, TARGET_MULTIPLIER=3.6, MACD_SIGNAL_PERIOD=5) should maintain win rate above 65%. This should improve overall fitness by capturing more opportunities (improving total return component which is 20% of fitness) while the strong risk-adjusted metrics (Sharpe 7.513, Sortino contribution) should remain robust due to the sound underlying signal logic.
-# CHANGE: Decrease MIN_CONFIDENCE from 59.0 to 57.0 to increase trade frequency while maintaining signal quality
+# EXPERIMENT: relax_macd_mixed_condition_scoring
+# HYPOTHESIS: Current fitness=8.8313 with 71.43% win rate and 21 trades shows excellent performance. The MACD component (15% weight) only scores when histogram AND line agree in direction - mixed cases (hist>0 but val<0, or hist<0 but val>0) contribute zero score. These mixed MACD states often occur during momentum transitions and can represent valid entry points. By allowing mixed MACD conditions to contribute a partial score (40% instead of 0%), the strategy should capture more quality setups during early momentum shifts, increasing trade frequency from 21 to approximately 24-27 trades while maintaining the strong 71% win rate. The proven signal logic (RSI_OVERBOUGHT=66, TARGET_MULTIPLIER=3.6, MIN_CONFIDENCE=57.0) should preserve risk-adjusted ratios while the expanded opportunity set improves total return (20% of fitness) and profit factor (10% of fitness).
+# CHANGE: Modified MACD scoring to award 40% contribution when histogram and line are mixed (transitional states) instead of zero, making the signal less binary
 
 """
 Pure-Python intraday day trading strategy — NO LLM calls.
@@ -19,9 +19,9 @@ from typing import Literal
 # ---------------------------------------------------------------------------
 # Experiment metadata (updated by the evolution agent each iteration)
 # ---------------------------------------------------------------------------
-EXPERIMENT_NAME = "decrease_min_confidence_to_57"
-EXPERIMENT_HYPOTHESIS = "Current fitness=8.3296 with 73.68% win rate and 19 trades shows excellent performance from RSI_OVERBOUGHT=66 and TARGET_MULTIPLIER=3.6. Looking at experiment history, MIN_CONFIDENCE=60.0 achieved fitness=7.2859 with 21 trades and 61.9% win rate, which was actually higher than the 6.0463 baseline it was compared against. The current MIN_CONFIDENCE=59.0 produces 19 trades with 73.68% win rate. The high win rate (73.68%) suggests the signal quality is strong, and the strategy is successfully identifying profitable setups. Decreasing MIN_CONFIDENCE from 59.0 to 57.0 should increase trade frequency from 19 to approximately 22-25 trades by allowing slightly lower-confidence signals through, while the proven signal logic (RSI_OVERBOUGHT=66, TARGET_MULTIPLIER=3.6, MACD_SIGNAL_PERIOD=5) should maintain win rate above 65%. This should improve overall fitness by capturing more opportunities (improving total return component which is 20% of fitness) while the strong risk-adjusted metrics (Sharpe 7.513, Sortino contribution) should remain robust due to the sound underlying signal logic."
-EXPERIMENT_CHANGE = "Decrease MIN_CONFIDENCE from 59.0 to 57.0 to increase trade frequency while maintaining signal quality"
+EXPERIMENT_NAME = "relax_macd_mixed_condition_scoring"
+EXPERIMENT_HYPOTHESIS = "Current fitness=8.8313 with 71.43% win rate and 21 trades shows excellent performance. The MACD component (15% weight) only scores when histogram AND line agree in direction - mixed cases (hist>0 but val<0, or hist<0 but val>0) contribute zero score. These mixed MACD states often occur during momentum transitions and can represent valid entry points. By allowing mixed MACD conditions to contribute a partial score (40% instead of 0%), the strategy should capture more quality setups during early momentum shifts, increasing trade frequency from 21 to approximately 24-27 trades while maintaining the strong 71% win rate. The proven signal logic (RSI_OVERBOUGHT=66, TARGET_MULTIPLIER=3.6, MIN_CONFIDENCE=57.0) should preserve risk-adjusted ratios while the expanded opportunity set improves total return (20% of fitness) and profit factor (10% of fitness)."
+EXPERIMENT_CHANGE = "Modified MACD scoring to award 40% contribution when histogram and line are mixed (transitional states) instead of zero, making the signal less binary"
 
 # ---------------------------------------------------------------------------
 # Tunable parameters — agent may change any of these
@@ -301,13 +301,20 @@ def _ticker_signal(
         else:
             bear_score += CONF_WEIGHT_VOLUME * vol_score
 
-    # MACD component - only score when histogram and line agree in direction
+    # MACD component - score both aligned and mixed conditions
     if macd_hist is not None and macd_val is not None:
         if macd_hist > 0 and macd_val > 0:
+            # Both positive - strong bullish
             bull_score += CONF_WEIGHT_MACD * 80.0
         elif macd_hist < 0 and macd_val < 0:
+            # Both negative - strong bearish
             bear_score += CONF_WEIGHT_MACD * 80.0
-        # Mixed cases (hist and line disagree) contribute no score - more selective
+        elif macd_hist > 0 and macd_val < 0:
+            # Mixed: histogram turning up but line still negative - early bull signal
+            bull_score += CONF_WEIGHT_MACD * 40.0
+        elif macd_hist < 0 and macd_val > 0:
+            # Mixed: histogram turning down but line still positive - early bear signal
+            bear_score += CONF_WEIGHT_MACD * 40.0
 
     # Regime alignment bonus
     regime = market_context.get("regime", "unknown")
