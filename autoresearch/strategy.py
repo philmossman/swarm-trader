@@ -1,6 +1,6 @@
-# EXPERIMENT: relax_macd_mixed_condition_scoring
-# HYPOTHESIS: Current fitness=8.8313 with 71.43% win rate and 21 trades shows excellent performance. The MACD component (15% weight) only scores when histogram AND line agree in direction - mixed cases (hist>0 but val<0, or hist<0 but val>0) contribute zero score. These mixed MACD states often occur during momentum transitions and can represent valid entry points. By allowing mixed MACD conditions to contribute a partial score (40% instead of 0%), the strategy should capture more quality setups during early momentum shifts, increasing trade frequency from 21 to approximately 24-27 trades while maintaining the strong 71% win rate. The proven signal logic (RSI_OVERBOUGHT=66, TARGET_MULTIPLIER=3.6, MIN_CONFIDENCE=57.0) should preserve risk-adjusted ratios while the expanded opportunity set improves total return (20% of fitness) and profit factor (10% of fitness).
-# CHANGE: Modified MACD scoring to award 40% contribution when histogram and line are mixed (transitional states) instead of zero, making the signal less binary
+# EXPERIMENT: increase_rsi_overbought_selectivity
+# HYPOTHESIS: Current fitness=9.6111 with 76.19% win rate and 21 trades shows exceptional performance. The RSI_OVERBOUGHT=66 threshold triggers bear signals, which with 76.19% win rate suggests very high signal quality. However, 66 is relatively low for overbought - standard levels are 70-80. The experiment history shows RSI_OVERBOUGHT=68 was tried and reverted (fitness=8.8660), suggesting 68 was too selective. A smaller 1-point increase to RSI_OVERBOUGHT=67 (vs the 2-point jump to 68 that failed) should make bear signals slightly more selective by filtering out weaker overbought conditions, potentially improving win rate from 76.19% toward 78-80% and enhancing risk-adjusted ratios (Sharpe 35% + Sortino 25% = 60% of fitness weight). With proven signal logic maintaining 21 trades and excellent risk management (TARGET_MULTIPLIER=3.6, MIN_CONFIDENCE=57.0), this minimal adjustment should preserve trade frequency around 20-21 while improving signal quality and profit factor (10% of fitness).
+# CHANGE: Increased RSI_OVERBOUGHT from 66 to 67 to make bear signals slightly more selective
 
 """
 Pure-Python intraday day trading strategy — NO LLM calls.
@@ -19,9 +19,9 @@ from typing import Literal
 # ---------------------------------------------------------------------------
 # Experiment metadata (updated by the evolution agent each iteration)
 # ---------------------------------------------------------------------------
-EXPERIMENT_NAME = "relax_macd_mixed_condition_scoring"
-EXPERIMENT_HYPOTHESIS = "Current fitness=8.8313 with 71.43% win rate and 21 trades shows excellent performance. The MACD component (15% weight) only scores when histogram AND line agree in direction - mixed cases (hist>0 but val<0, or hist<0 but val>0) contribute zero score. These mixed MACD states often occur during momentum transitions and can represent valid entry points. By allowing mixed MACD conditions to contribute a partial score (40% instead of 0%), the strategy should capture more quality setups during early momentum shifts, increasing trade frequency from 21 to approximately 24-27 trades while maintaining the strong 71% win rate. The proven signal logic (RSI_OVERBOUGHT=66, TARGET_MULTIPLIER=3.6, MIN_CONFIDENCE=57.0) should preserve risk-adjusted ratios while the expanded opportunity set improves total return (20% of fitness) and profit factor (10% of fitness)."
-EXPERIMENT_CHANGE = "Modified MACD scoring to award 40% contribution when histogram and line are mixed (transitional states) instead of zero, making the signal less binary"
+EXPERIMENT_NAME = "increase_rsi_overbought_selectivity"
+EXPERIMENT_HYPOTHESIS = "Current fitness=9.6111 with 76.19% win rate and 21 trades shows exceptional performance. The RSI_OVERBOUGHT=66 threshold triggers bear signals, which with 76.19% win rate suggests very high signal quality. However, 66 is relatively low for overbought - standard levels are 70-80. The experiment history shows RSI_OVERBOUGHT=68 was tried and reverted (fitness=8.8660), suggesting 68 was too selective. A smaller 1-point increase to RSI_OVERBOUGHT=67 (vs the 2-point jump to 68 that failed) should make bear signals slightly more selective by filtering out weaker overbought conditions, potentially improving win rate from 76.19% toward 78-80% and enhancing risk-adjusted ratios (Sharpe 35% + Sortino 25% = 60% of fitness weight). With proven signal logic maintaining 21 trades and excellent risk management (TARGET_MULTIPLIER=3.6, MIN_CONFIDENCE=57.0), this minimal adjustment should preserve trade frequency around 20-21 while improving signal quality and profit factor (10% of fitness)."
+EXPERIMENT_CHANGE = "Increased RSI_OVERBOUGHT from 66 to 67 to make bear signals slightly more selective"
 
 # ---------------------------------------------------------------------------
 # Tunable parameters — agent may change any of these
@@ -33,7 +33,7 @@ RSI_OVERSOLD = 25           # Buy signal below this
 RSI_VERY_OVERSOLD = 28      # Very oversold tier (90% score)
 RSI_STRONG_OVERSOLD = 31    # Strong oversold tier (80% score)
 RSI_MODERATE_OVERSOLD = 38  # Moderate oversold tier (70% score)
-RSI_OVERBOUGHT = 66         # Sell signal above this
+RSI_OVERBOUGHT = 67         # Sell signal above this
 RSI_NEUTRAL_LOW = 48        # Weak bull zone lower bound
 RSI_NEUTRAL_HIGH = 53       # Weak bear zone upper bound
 
