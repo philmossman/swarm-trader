@@ -1,6 +1,6 @@
-# EXPERIMENT: reduce_macd_signal_period
-# HYPOTHESIS: Current fitness=5.8586 with 66.67% win rate and 18 trades from TARGET_MULTIPLIER=3.6 shows strong performance. Recent experiments tried MIN_CONFIDENCE, STOP_PCT, volume thresholds, and RSI adjustments but all reverted. The MACD_SIGNAL_PERIOD of 7 determines the signal line EMA smoothing. A longer signal period (7) creates lag in detecting momentum shifts, potentially causing the strategy to enter after optimal timing or miss early momentum confirmation. Decreasing MACD_SIGNAL_PERIOD from 7 to 5 makes the signal line more responsive to MACD line changes, allowing faster detection of histogram crossovers when both line and histogram agree in direction (our MACD scoring condition). This should improve risk-adjusted ratios (Sharpe 35% + Sortino 25% = 60% fitness weight) by capturing momentum earlier with better entry timing, helping reach the extended 3.6x targets more reliably without changing trade frequency dramatically.
-# CHANGE: Decrease MACD_SIGNAL_PERIOD from 7 to 5 for faster momentum confirmation
+# EXPERIMENT: increase_rsi_overbought_threshold
+# HYPOTHESIS: Current fitness=6.0463 with 68.75% win rate and 16 trades shows strong performance from MACD_SIGNAL_PERIOD=5 and TARGET_MULTIPLIER=3.6. Recent experiments focused on tightening entry criteria (MIN_CONFIDENCE increases, RSI_OVERSOLD/RSI_MODERATE_OVERSOLD tightening) but all reverted. The RSI_OVERBOUGHT threshold of 63 may be too low - it triggers bear signals prematurely when RSI is only moderately elevated, potentially causing short entries in stocks that still have upward momentum. With extended 3.6x targets requiring strong directional moves, raising RSI_OVERBOUGHT from 63 to 66 makes short signals more selective by requiring truly overbought conditions (>66) before triggering the maximum bear score. This should improve risk-adjusted ratios (Sharpe 35% + Sortino 25% = 60% fitness weight) by filtering out premature short entries that fight momentum, while maintaining the strong long-side performance that drives the 68.75% win rate. The asymmetric approach (tight long filters, relaxed short filters) aligns with market's natural upward bias.
+# CHANGE: Increase RSI_OVERBOUGHT from 63 to 66 for more selective short signals
 
 """
 Pure-Python intraday day trading strategy — NO LLM calls.
@@ -19,9 +19,9 @@ from typing import Literal
 # ---------------------------------------------------------------------------
 # Experiment metadata (updated by the evolution agent each iteration)
 # ---------------------------------------------------------------------------
-EXPERIMENT_NAME = "reduce_macd_signal_period"
-EXPERIMENT_HYPOTHESIS = "Current fitness=5.8586 with 66.67% win rate and 18 trades from TARGET_MULTIPLIER=3.6 shows strong performance. Recent experiments tried MIN_CONFIDENCE, STOP_PCT, volume thresholds, and RSI adjustments but all reverted. The MACD_SIGNAL_PERIOD of 7 determines the signal line EMA smoothing. A longer signal period (7) creates lag in detecting momentum shifts, potentially causing the strategy to enter after optimal timing or miss early momentum confirmation. Decreasing MACD_SIGNAL_PERIOD from 7 to 5 makes the signal line more responsive to MACD line changes, allowing faster detection of histogram crossovers when both line and histogram agree in direction (our MACD scoring condition). This should improve risk-adjusted ratios (Sharpe 35% + Sortino 25% = 60% fitness weight) by capturing momentum earlier with better entry timing, helping reach the extended 3.6x targets more reliably without changing trade frequency dramatically."
-EXPERIMENT_CHANGE = "Decrease MACD_SIGNAL_PERIOD from 7 to 5 for faster momentum confirmation"
+EXPERIMENT_NAME = "increase_rsi_overbought_threshold"
+EXPERIMENT_HYPOTHESIS = "Current fitness=6.0463 with 68.75% win rate and 16 trades shows strong performance from MACD_SIGNAL_PERIOD=5 and TARGET_MULTIPLIER=3.6. Recent experiments focused on tightening entry criteria (MIN_CONFIDENCE increases, RSI_OVERSOLD/RSI_MODERATE_OVERSOLD tightening) but all reverted. The RSI_OVERBOUGHT threshold of 63 may be too low - it triggers bear signals prematurely when RSI is only moderately elevated, potentially causing short entries in stocks that still have upward momentum. With extended 3.6x targets requiring strong directional moves, raising RSI_OVERBOUGHT from 63 to 66 makes short signals more selective by requiring truly overbought conditions (>66) before triggering the maximum bear score. This should improve risk-adjusted ratios (Sharpe 35% + Sortino 25% = 60% fitness weight) by filtering out premature short entries that fight momentum, while maintaining the strong long-side performance that drives the 68.75% win rate. The asymmetric approach (tight long filters, relaxed short filters) aligns with market's natural upward bias."
+EXPERIMENT_CHANGE = "Increase RSI_OVERBOUGHT from 63 to 66 for more selective short signals"
 
 # ---------------------------------------------------------------------------
 # Tunable parameters — agent may change any of these
@@ -33,7 +33,7 @@ RSI_OVERSOLD = 25           # Buy signal below this
 RSI_VERY_OVERSOLD = 28      # Very oversold tier (90% score)
 RSI_STRONG_OVERSOLD = 31    # Strong oversold tier (80% score)
 RSI_MODERATE_OVERSOLD = 38  # Moderate oversold tier (70% score)
-RSI_OVERBOUGHT = 63         # Sell signal above this
+RSI_OVERBOUGHT = 66         # Sell signal above this
 RSI_NEUTRAL_LOW = 48        # Weak bull zone lower bound
 RSI_NEUTRAL_HIGH = 53       # Weak bear zone upper bound
 
