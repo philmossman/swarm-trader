@@ -1,6 +1,6 @@
-# EXPERIMENT: increase_rsi_overbought_threshold
-# HYPOTHESIS: Current fitness=6.0463 with 68.75% win rate and 16 trades shows strong performance from MACD_SIGNAL_PERIOD=5 and TARGET_MULTIPLIER=3.6. Recent experiments focused on tightening entry criteria (MIN_CONFIDENCE increases, RSI_OVERSOLD/RSI_MODERATE_OVERSOLD tightening) but all reverted. The RSI_OVERBOUGHT threshold of 63 may be too low - it triggers bear signals prematurely when RSI is only moderately elevated, potentially causing short entries in stocks that still have upward momentum. With extended 3.6x targets requiring strong directional moves, raising RSI_OVERBOUGHT from 63 to 66 makes short signals more selective by requiring truly overbought conditions (>66) before triggering the maximum bear score. This should improve risk-adjusted ratios (Sharpe 35% + Sortino 25% = 60% fitness weight) by filtering out premature short entries that fight momentum, while maintaining the strong long-side performance that drives the 68.75% win rate. The asymmetric approach (tight long filters, relaxed short filters) aligns with market's natural upward bias.
-# CHANGE: Increase RSI_OVERBOUGHT from 63 to 66 for more selective short signals
+# EXPERIMENT: decrease_min_confidence_to_57
+# HYPOTHESIS: Current fitness=8.3296 with 73.68% win rate and 19 trades shows excellent performance from RSI_OVERBOUGHT=66 and TARGET_MULTIPLIER=3.6. Looking at experiment history, MIN_CONFIDENCE=60.0 achieved fitness=7.2859 with 21 trades and 61.9% win rate, which was actually higher than the 6.0463 baseline it was compared against. The current MIN_CONFIDENCE=59.0 produces 19 trades with 73.68% win rate. The high win rate (73.68%) suggests the signal quality is strong, and the strategy is successfully identifying profitable setups. Decreasing MIN_CONFIDENCE from 59.0 to 57.0 should increase trade frequency from 19 to approximately 22-25 trades by allowing slightly lower-confidence signals through, while the proven signal logic (RSI_OVERBOUGHT=66, TARGET_MULTIPLIER=3.6, MACD_SIGNAL_PERIOD=5) should maintain win rate above 65%. This should improve overall fitness by capturing more opportunities (improving total return component which is 20% of fitness) while the strong risk-adjusted metrics (Sharpe 7.513, Sortino contribution) should remain robust due to the sound underlying signal logic.
+# CHANGE: Decrease MIN_CONFIDENCE from 59.0 to 57.0 to increase trade frequency while maintaining signal quality
 
 """
 Pure-Python intraday day trading strategy — NO LLM calls.
@@ -19,9 +19,9 @@ from typing import Literal
 # ---------------------------------------------------------------------------
 # Experiment metadata (updated by the evolution agent each iteration)
 # ---------------------------------------------------------------------------
-EXPERIMENT_NAME = "increase_rsi_overbought_threshold"
-EXPERIMENT_HYPOTHESIS = "Current fitness=6.0463 with 68.75% win rate and 16 trades shows strong performance from MACD_SIGNAL_PERIOD=5 and TARGET_MULTIPLIER=3.6. Recent experiments focused on tightening entry criteria (MIN_CONFIDENCE increases, RSI_OVERSOLD/RSI_MODERATE_OVERSOLD tightening) but all reverted. The RSI_OVERBOUGHT threshold of 63 may be too low - it triggers bear signals prematurely when RSI is only moderately elevated, potentially causing short entries in stocks that still have upward momentum. With extended 3.6x targets requiring strong directional moves, raising RSI_OVERBOUGHT from 63 to 66 makes short signals more selective by requiring truly overbought conditions (>66) before triggering the maximum bear score. This should improve risk-adjusted ratios (Sharpe 35% + Sortino 25% = 60% fitness weight) by filtering out premature short entries that fight momentum, while maintaining the strong long-side performance that drives the 68.75% win rate. The asymmetric approach (tight long filters, relaxed short filters) aligns with market's natural upward bias."
-EXPERIMENT_CHANGE = "Increase RSI_OVERBOUGHT from 63 to 66 for more selective short signals"
+EXPERIMENT_NAME = "decrease_min_confidence_to_57"
+EXPERIMENT_HYPOTHESIS = "Current fitness=8.3296 with 73.68% win rate and 19 trades shows excellent performance from RSI_OVERBOUGHT=66 and TARGET_MULTIPLIER=3.6. Looking at experiment history, MIN_CONFIDENCE=60.0 achieved fitness=7.2859 with 21 trades and 61.9% win rate, which was actually higher than the 6.0463 baseline it was compared against. The current MIN_CONFIDENCE=59.0 produces 19 trades with 73.68% win rate. The high win rate (73.68%) suggests the signal quality is strong, and the strategy is successfully identifying profitable setups. Decreasing MIN_CONFIDENCE from 59.0 to 57.0 should increase trade frequency from 19 to approximately 22-25 trades by allowing slightly lower-confidence signals through, while the proven signal logic (RSI_OVERBOUGHT=66, TARGET_MULTIPLIER=3.6, MACD_SIGNAL_PERIOD=5) should maintain win rate above 65%. This should improve overall fitness by capturing more opportunities (improving total return component which is 20% of fitness) while the strong risk-adjusted metrics (Sharpe 7.513, Sortino contribution) should remain robust due to the sound underlying signal logic."
+EXPERIMENT_CHANGE = "Decrease MIN_CONFIDENCE from 59.0 to 57.0 to increase trade frequency while maintaining signal quality"
 
 # ---------------------------------------------------------------------------
 # Tunable parameters — agent may change any of these
@@ -51,7 +51,7 @@ TARGET_MULTIPLIER = 3.6         # R:R ratio (target = entry ± stop_dist * 3.6)
 MAX_POSITION_SIZE_PCT = 0.15    # Max 15% of portfolio per position
 
 # Minimum confidence to emit a signal (0–100)
-MIN_CONFIDENCE = 59.0
+MIN_CONFIDENCE = 57.0
 
 # Confidence component weights (must sum to 1.0)
 CONF_WEIGHT_RSI = 0.35
