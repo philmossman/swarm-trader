@@ -1,6 +1,6 @@
-# EXPERIMENT: increase_rsi_overbought_selectivity
-# HYPOTHESIS: Current fitness=9.6111 with 76.19% win rate and 21 trades shows exceptional performance. The RSI_OVERBOUGHT=66 threshold triggers bear signals, which with 76.19% win rate suggests very high signal quality. However, 66 is relatively low for overbought - standard levels are 70-80. The experiment history shows RSI_OVERBOUGHT=68 was tried and reverted (fitness=8.8660), suggesting 68 was too selective. A smaller 1-point increase to RSI_OVERBOUGHT=67 (vs the 2-point jump to 68 that failed) should make bear signals slightly more selective by filtering out weaker overbought conditions, potentially improving win rate from 76.19% toward 78-80% and enhancing risk-adjusted ratios (Sharpe 35% + Sortino 25% = 60% of fitness weight). With proven signal logic maintaining 21 trades and excellent risk management (TARGET_MULTIPLIER=3.6, MIN_CONFIDENCE=57.0), this minimal adjustment should preserve trade frequency around 20-21 while improving signal quality and profit factor (10% of fitness).
-# CHANGE: Increased RSI_OVERBOUGHT from 66 to 67 to make bear signals slightly more selective
+# EXPERIMENT: increase_target_multiplier
+# HYPOTHESIS: Current fitness=9.6178 with 76.19% win rate and 21 trades shows exceptional signal quality. The TARGET_MULTIPLIER=3.6 sets profit targets at 3.6x the stop distance. With a 76.19% win rate, the strategy is highly accurate, suggesting winners have room to run further before reverting. Increasing TARGET_MULTIPLIER from 3.6 to 3.8 allows winning trades to capture more profit by setting targets 5.6% further out (3.8/3.6 = 1.056), which should improve total return (20% of fitness weight) and profit factor (10% of fitness weight). The proven signal logic (RSI_OVERBOUGHT=67, MIN_CONFIDENCE=57.0, MACD mixed scoring) with 76.19% win rate indicates sufficient accuracy to reach these extended targets. Trade frequency should remain around 21, and the strong risk management (STOP_PCT=0.010) preserves downside protection while allowing upside expansion.
+# CHANGE: Increased TARGET_MULTIPLIER from 3.6 to 3.8 to allow winning trades to capture more profit
 
 """
 Pure-Python intraday day trading strategy — NO LLM calls.
@@ -19,9 +19,9 @@ from typing import Literal
 # ---------------------------------------------------------------------------
 # Experiment metadata (updated by the evolution agent each iteration)
 # ---------------------------------------------------------------------------
-EXPERIMENT_NAME = "increase_rsi_overbought_selectivity"
-EXPERIMENT_HYPOTHESIS = "Current fitness=9.6111 with 76.19% win rate and 21 trades shows exceptional performance. The RSI_OVERBOUGHT=66 threshold triggers bear signals, which with 76.19% win rate suggests very high signal quality. However, 66 is relatively low for overbought - standard levels are 70-80. The experiment history shows RSI_OVERBOUGHT=68 was tried and reverted (fitness=8.8660), suggesting 68 was too selective. A smaller 1-point increase to RSI_OVERBOUGHT=67 (vs the 2-point jump to 68 that failed) should make bear signals slightly more selective by filtering out weaker overbought conditions, potentially improving win rate from 76.19% toward 78-80% and enhancing risk-adjusted ratios (Sharpe 35% + Sortino 25% = 60% of fitness weight). With proven signal logic maintaining 21 trades and excellent risk management (TARGET_MULTIPLIER=3.6, MIN_CONFIDENCE=57.0), this minimal adjustment should preserve trade frequency around 20-21 while improving signal quality and profit factor (10% of fitness)."
-EXPERIMENT_CHANGE = "Increased RSI_OVERBOUGHT from 66 to 67 to make bear signals slightly more selective"
+EXPERIMENT_NAME = "increase_target_multiplier"
+EXPERIMENT_HYPOTHESIS = "Current fitness=9.6178 with 76.19% win rate and 21 trades shows exceptional signal quality. The TARGET_MULTIPLIER=3.6 sets profit targets at 3.6x the stop distance. With a 76.19% win rate, the strategy is highly accurate, suggesting winners have room to run further before reverting. Increasing TARGET_MULTIPLIER from 3.6 to 3.8 allows winning trades to capture more profit by setting targets 5.6% further out (3.8/3.6 = 1.056), which should improve total return (20% of fitness weight) and profit factor (10% of fitness weight). The proven signal logic (RSI_OVERBOUGHT=67, MIN_CONFIDENCE=57.0, MACD mixed scoring) with 76.19% win rate indicates sufficient accuracy to reach these extended targets. Trade frequency should remain around 21, and the strong risk management (STOP_PCT=0.010) preserves downside protection while allowing upside expansion."
+EXPERIMENT_CHANGE = "Increased TARGET_MULTIPLIER from 3.6 to 3.8 to allow winning trades to capture more profit"
 
 # ---------------------------------------------------------------------------
 # Tunable parameters — agent may change any of these
@@ -47,7 +47,7 @@ VOLUME_STRONG_RATIO = 2.50      # >= 2.5x = strong conviction
 
 # Risk / sizing
 STOP_PCT = 0.010                # Default stop = 1.0% from entry
-TARGET_MULTIPLIER = 3.6         # R:R ratio (target = entry ± stop_dist * 3.6)
+TARGET_MULTIPLIER = 3.8         # R:R ratio (target = entry ± stop_dist * 3.8)
 MAX_POSITION_SIZE_PCT = 0.15    # Max 15% of portfolio per position
 
 # Minimum confidence to emit a signal (0–100)
