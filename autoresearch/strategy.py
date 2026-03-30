@@ -1,6 +1,6 @@
-# EXPERIMENT: increase_target_multiplier
-# HYPOTHESIS: Current fitness=9.6178 with 76.19% win rate and 21 trades shows exceptional signal quality. The TARGET_MULTIPLIER=3.6 sets profit targets at 3.6x the stop distance. With a 76.19% win rate, the strategy is highly accurate, suggesting winners have room to run further before reverting. Increasing TARGET_MULTIPLIER from 3.6 to 3.8 allows winning trades to capture more profit by setting targets 5.6% further out (3.8/3.6 = 1.056), which should improve total return (20% of fitness weight) and profit factor (10% of fitness weight). The proven signal logic (RSI_OVERBOUGHT=67, MIN_CONFIDENCE=57.0, MACD mixed scoring) with 76.19% win rate indicates sufficient accuracy to reach these extended targets. Trade frequency should remain around 21, and the strong risk management (STOP_PCT=0.010) preserves downside protection while allowing upside expansion.
-# CHANGE: Increased TARGET_MULTIPLIER from 3.6 to 3.8 to allow winning trades to capture more profit
+# EXPERIMENT: reduce_rsi_overbought_threshold
+# HYPOTHESIS: Current fitness=9.4711 with 53.85% win rate and 26 trades shows win rate collapsed from historical 76.19%. All attempts to modify TARGET_MULTIPLIER (3.6-3.8), STOP_PCT, and RSI_OVERSOLD failed to recover high win rate. The experiment history shows RSI_OVERBOUGHT=67 has been stable across recent experiments. Current RSI_OVERBOUGHT=67 may be too high - generating short signals only at extreme overbought levels (>67), potentially missing quality mean-reversion short setups. The RSI scoring structure shows RSI_NEUTRAL_HIGH=53, creating a large dead zone (53-67) where no strong short signals are generated. Reducing RSI_OVERBOUGHT from 67 to 64 will generate short signals earlier in overbought conditions, capturing better entry points for mean-reversion shorts with more room to run to targets. With 26 trades currently vs 21 historically, this should maintain trade frequency while improving win rate from 53.85% toward 60-65% by entering overbought conditions earlier, improving win rate component (10% of fitness) and profit factor (10% of fitness).
+# CHANGE: Reduced RSI_OVERBOUGHT from 67 to 64 to generate short signals earlier in overbought conditions
 
 """
 Pure-Python intraday day trading strategy — NO LLM calls.
@@ -19,9 +19,9 @@ from typing import Literal
 # ---------------------------------------------------------------------------
 # Experiment metadata (updated by the evolution agent each iteration)
 # ---------------------------------------------------------------------------
-EXPERIMENT_NAME = "increase_target_multiplier"
-EXPERIMENT_HYPOTHESIS = "Current fitness=9.6178 with 76.19% win rate and 21 trades shows exceptional signal quality. The TARGET_MULTIPLIER=3.6 sets profit targets at 3.6x the stop distance. With a 76.19% win rate, the strategy is highly accurate, suggesting winners have room to run further before reverting. Increasing TARGET_MULTIPLIER from 3.6 to 3.8 allows winning trades to capture more profit by setting targets 5.6% further out (3.8/3.6 = 1.056), which should improve total return (20% of fitness weight) and profit factor (10% of fitness weight). The proven signal logic (RSI_OVERBOUGHT=67, MIN_CONFIDENCE=57.0, MACD mixed scoring) with 76.19% win rate indicates sufficient accuracy to reach these extended targets. Trade frequency should remain around 21, and the strong risk management (STOP_PCT=0.010) preserves downside protection while allowing upside expansion."
-EXPERIMENT_CHANGE = "Increased TARGET_MULTIPLIER from 3.6 to 3.8 to allow winning trades to capture more profit"
+EXPERIMENT_NAME = "reduce_rsi_overbought_threshold"
+EXPERIMENT_HYPOTHESIS = "Current fitness=9.4711 with 53.85% win rate and 26 trades shows win rate collapsed from historical 76.19%. All attempts to modify TARGET_MULTIPLIER (3.6-3.8), STOP_PCT, and RSI_OVERSOLD failed to recover high win rate. The experiment history shows RSI_OVERBOUGHT=67 has been stable across recent experiments. Current RSI_OVERBOUGHT=67 may be too high - generating short signals only at extreme overbought levels (>67), potentially missing quality mean-reversion short setups. The RSI scoring structure shows RSI_NEUTRAL_HIGH=53, creating a large dead zone (53-67) where no strong short signals are generated. Reducing RSI_OVERBOUGHT from 67 to 64 will generate short signals earlier in overbought conditions, capturing better entry points for mean-reversion shorts with more room to run to targets. With 26 trades currently vs 21 historically, this should maintain trade frequency while improving win rate from 53.85% toward 60-65% by entering overbought conditions earlier, improving win rate component (10% of fitness) and profit factor (10% of fitness)."
+EXPERIMENT_CHANGE = "Reduced RSI_OVERBOUGHT from 67 to 64 to generate short signals earlier in overbought conditions"
 
 # ---------------------------------------------------------------------------
 # Tunable parameters — agent may change any of these
@@ -33,7 +33,7 @@ RSI_OVERSOLD = 25           # Buy signal below this
 RSI_VERY_OVERSOLD = 28      # Very oversold tier (90% score)
 RSI_STRONG_OVERSOLD = 31    # Strong oversold tier (80% score)
 RSI_MODERATE_OVERSOLD = 38  # Moderate oversold tier (70% score)
-RSI_OVERBOUGHT = 67         # Sell signal above this
+RSI_OVERBOUGHT = 64         # Sell signal above this
 RSI_NEUTRAL_LOW = 48        # Weak bull zone lower bound
 RSI_NEUTRAL_HIGH = 53       # Weak bear zone upper bound
 
