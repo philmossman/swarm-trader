@@ -1,6 +1,6 @@
-# EXPERIMENT: reduce_rsi_overbought_threshold
-# HYPOTHESIS: Current fitness=9.4711 with 53.85% win rate and 26 trades shows win rate collapsed from historical 76.19%. All attempts to modify TARGET_MULTIPLIER (3.6-3.8), STOP_PCT, and RSI_OVERSOLD failed to recover high win rate. The experiment history shows RSI_OVERBOUGHT=67 has been stable across recent experiments. Current RSI_OVERBOUGHT=67 may be too high - generating short signals only at extreme overbought levels (>67), potentially missing quality mean-reversion short setups. The RSI scoring structure shows RSI_NEUTRAL_HIGH=53, creating a large dead zone (53-67) where no strong short signals are generated. Reducing RSI_OVERBOUGHT from 67 to 64 will generate short signals earlier in overbought conditions, capturing better entry points for mean-reversion shorts with more room to run to targets. With 26 trades currently vs 21 historically, this should maintain trade frequency while improving win rate from 53.85% toward 60-65% by entering overbought conditions earlier, improving win rate component (10% of fitness) and profit factor (10% of fitness).
-# CHANGE: Reduced RSI_OVERBOUGHT from 67 to 64 to generate short signals earlier in overbought conditions
+# EXPERIMENT: increase_rsi_strong_oversold
+# HYPOTHESIS: Current fitness=9.4757 with 55.56% win rate and 27 trades shows improvement from RSI_OVERBOUGHT 67→64 (+0.0046 fitness). The RSI tiering for longs has RSI_OVERSOLD=25 (100% score), RSI_VERY_OVERSOLD=28 (90% score), RSI_STRONG_OVERSOLD=31 (80% score), RSI_MODERATE_OVERSOLD=38 (70% score). The 31-38 band (7 points) for the 70-80% tier is much wider than the 25-28 band (3 points) for the 90-100% tier, creating imbalance in signal distribution. The RSI_STRONG_OVERSOLD=31 threshold may be too low - the 31-38 range captures too broad a zone as "strong oversold" when prices in the 34-38 range aren't truly strong mean-reversion setups. Increasing RSI_STRONG_OVERSOLD from 31 to 33 narrows the 80% confidence tier (25-28-33 vs 25-28-31) and shifts more marginal signals (RSI 31-33) into the lower 70% tier, improving signal quality. This should generate fewer but higher-quality long entries in true oversold conditions, improving win rate from 55.56% toward 58-62% by filtering out premature entries in the 31-33 RSI range, improving win rate component (10% of fitness) and profit factor (10% of fitness).
+# CHANGE: Increased RSI_STRONG_OVERSOLD from 31 to 33 to narrow the high-confidence oversold tier and improve long signal quality
 
 """
 Pure-Python intraday day trading strategy — NO LLM calls.
@@ -19,9 +19,9 @@ from typing import Literal
 # ---------------------------------------------------------------------------
 # Experiment metadata (updated by the evolution agent each iteration)
 # ---------------------------------------------------------------------------
-EXPERIMENT_NAME = "reduce_rsi_overbought_threshold"
-EXPERIMENT_HYPOTHESIS = "Current fitness=9.4711 with 53.85% win rate and 26 trades shows win rate collapsed from historical 76.19%. All attempts to modify TARGET_MULTIPLIER (3.6-3.8), STOP_PCT, and RSI_OVERSOLD failed to recover high win rate. The experiment history shows RSI_OVERBOUGHT=67 has been stable across recent experiments. Current RSI_OVERBOUGHT=67 may be too high - generating short signals only at extreme overbought levels (>67), potentially missing quality mean-reversion short setups. The RSI scoring structure shows RSI_NEUTRAL_HIGH=53, creating a large dead zone (53-67) where no strong short signals are generated. Reducing RSI_OVERBOUGHT from 67 to 64 will generate short signals earlier in overbought conditions, capturing better entry points for mean-reversion shorts with more room to run to targets. With 26 trades currently vs 21 historically, this should maintain trade frequency while improving win rate from 53.85% toward 60-65% by entering overbought conditions earlier, improving win rate component (10% of fitness) and profit factor (10% of fitness)."
-EXPERIMENT_CHANGE = "Reduced RSI_OVERBOUGHT from 67 to 64 to generate short signals earlier in overbought conditions"
+EXPERIMENT_NAME = "increase_rsi_strong_oversold"
+EXPERIMENT_HYPOTHESIS = "Current fitness=9.4757 with 55.56% win rate and 27 trades shows improvement from RSI_OVERBOUGHT 67→64 (+0.0046 fitness). The RSI tiering for longs has RSI_OVERSOLD=25 (100% score), RSI_VERY_OVERSOLD=28 (90% score), RSI_STRONG_OVERSOLD=31 (80% score), RSI_MODERATE_OVERSOLD=38 (70% score). The 31-38 band (7 points) for the 70-80% tier is much wider than the 25-28 band (3 points) for the 90-100% tier, creating imbalance in signal distribution. The RSI_STRONG_OVERSOLD=31 threshold may be too low - the 31-38 range captures too broad a zone as 'strong oversold' when prices in the 34-38 range aren't truly strong mean-reversion setups. Increasing RSI_STRONG_OVERSOLD from 31 to 33 narrows the 80% confidence tier (25-28-33 vs 25-28-31) and shifts more marginal signals (RSI 31-33) into the lower 70% tier, improving signal quality. This should generate fewer but higher-quality long entries in true oversold conditions, improving win rate from 55.56% toward 58-62% by filtering out premature entries in the 31-33 RSI range, improving win rate component (10% of fitness) and profit factor (10% of fitness)."
+EXPERIMENT_CHANGE = "Increased RSI_STRONG_OVERSOLD from 31 to 33 to narrow the high-confidence oversold tier and improve long signal quality"
 
 # ---------------------------------------------------------------------------
 # Tunable parameters — agent may change any of these
@@ -31,7 +31,7 @@ EXPERIMENT_CHANGE = "Reduced RSI_OVERBOUGHT from 67 to 64 to generate short sign
 RSI_PERIOD = 10
 RSI_OVERSOLD = 25           # Buy signal below this
 RSI_VERY_OVERSOLD = 28      # Very oversold tier (90% score)
-RSI_STRONG_OVERSOLD = 31    # Strong oversold tier (80% score)
+RSI_STRONG_OVERSOLD = 33    # Strong oversold tier (80% score)
 RSI_MODERATE_OVERSOLD = 38  # Moderate oversold tier (70% score)
 RSI_OVERBOUGHT = 64         # Sell signal above this
 RSI_NEUTRAL_LOW = 48        # Weak bull zone lower bound
