@@ -96,6 +96,13 @@ def get_account_for_mode(mode: str = None) -> AlpacaAccount:
     if mode == "swing" and "day" in _ACCOUNTS:
         return _ACCOUNTS["day"]
 
+    # Fallback: if day account isn't configured, use swing account
+    if mode == "day" and "swing" in _ACCOUNTS:
+        return _ACCOUNTS["swing"]
+
+    if "swing" in _ACCOUNTS:
+        return _ACCOUNTS["swing"]
+
     if "day" in _ACCOUNTS:
         return _ACCOUNTS["day"]
 

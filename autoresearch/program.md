@@ -4,6 +4,32 @@
 
 ---
 
+## Current Strategy State (as of 2026-03-26)
+
+**⚠️ This section should be reviewed and updated weekly. After 2026-04-07, the VWAP 10.0 warning below may no longer apply — the rolling 10-day data window will contain entirely different market conditions. Re-test before treating any parameter as permanently bad.**
+
+**Current fitness: 6.046** (fitness=6.046322, win_rate=0.6875, 16 trades, Sharpe 4.48, Sortino 15.92)
+
+**Historical context:** All-time best was **fitness=10.074** (Mar 18, 91.3% win rate, 23 trades) with VWAP multiplier 10.0 on Mar 4–18 data. The current 6.046 reflects different market conditions in the rolling 10-day window — not strategy regression. Parameters that score poorly now may recover as the data window shifts.
+
+**Key changes already kept in strategy.py (relative to Mar 18 baseline):**
+- `TARGET_MULTIPLIER = 3.6` (was 3.3 — kept Mar 25, improved fitness from degraded ~4.96 baseline)
+- `MACD_SIGNAL_PERIOD = 5` (was 7 — kept Mar 25, fitness 5.86→6.05)
+- `dev * 9.0` in VWAP scoring (was 10.0 — kept Mar 24; do NOT revert before 2026-04-07)
+
+**⚠️ DO NOT attempt to revert VWAP multiplier to 10.0 before 2026-04-07:**
+This was tried 10+ consecutive times and produced fitness=4.926 every time on current market data. The 10.0 value performed poorly because the rolling 10-day window now covers a different market regime. After 2026-04-07 (when the window fully rotates), it may be worth retrying. Other VWAP multiplier values (e.g. 8.5, 9.5) have NOT been tried — those are valid experiments.
+
+**Unexplored directions (prioritise these):**
+- `TARGET_MULTIPLIER` above 3.6 (e.g. 3.8, 4.0)
+- `MACD_FAST`/`MACD_SLOW` period tuning (currently 8/21)
+- VWAP multiplier alternatives: 8.5 or 9.5 (NOT 10.0 until after 2026-04-07)
+- `SWING_TARGET_MULTIPLIER` (currently 2.5, not recently optimised)
+- `NO_TRADE_OPEN_MINUTES` (currently 5 — briefly tried 4 with higher baseline, worth retry)
+- SPY/QQQ alignment bonus multipliers (currently 1.05)
+
+---
+
 ## Known Failure Modes (read before iterating)
 
 **1. Volatile regime + MIN_CONFIDENCE interaction**

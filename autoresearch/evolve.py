@@ -30,6 +30,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import textwrap
@@ -43,6 +44,19 @@ import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# ---------------------------------------------------------------------------
+# Graceful shutdown (SIGTERM / SIGINT)
+# ---------------------------------------------------------------------------
+_shutdown_requested = False
+
+def _handle_signal(signum: int, frame: object) -> None:
+    global _shutdown_requested
+    _shutdown_requested = True
+    print(f"\n[evolve] Signal {signum} received — will stop after current iteration completes.", file=sys.stderr)
+
+signal.signal(signal.SIGTERM, _handle_signal)
+signal.signal(signal.SIGINT, _handle_signal)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -277,7 +291,7 @@ def _run_agent_claude(prompt: str, quiet: bool = False) -> tuple[bool, str]:
                 return False, f"OpenRouter API error {status}: authentication failed"
             last_error = f"OpenRouter API error {status}"
             if attempt < 2 and status in (429, 500, 502, 503, 504):
-                wait = 2 ** attempt  # 1s, 2s
+                wait = min(60, 5 * (2 ** attempt))  # 5s, 10s — adequate for rate-limit cooldown
                 if not quiet:
                     print(f"  [agent] {last_error} — retrying in {wait}s (attempt {attempt+1}/3)...", file=sys.stderr)
                 time.sleep(wait)
@@ -534,6 +548,11 @@ def main() -> int:
         "--quiet", action="store_true",
         help="Suppress verbose progress output",
     )
+    parser.add_argument(
+        "--max-runtime-minutes", type=int, default=None,
+        help="Stop gracefully after this many minutes (default: no limit). "
+             "Set to ~50 when running from a cron to avoid session-timeout kills.",
+    )
     args = parser.parse_args()
 
     # Default backtest days depends on mode
@@ -555,7 +574,14 @@ def main() -> int:
     print(f"Capital:        ${args.capital:,.0f}", file=sys.stderr)
     print(f"Strategy:       {STRATEGY_PATH}", file=sys.stderr)
     print(f"Log:            {LOG_PATH}", file=sys.stderr)
+    if args.max_runtime_minutes:
+        print(f"Max runtime:    {args.max_runtime_minutes} minutes", file=sys.stderr)
     print(f"{'='*60}\n", file=sys.stderr)
+
+    # Deadline for graceful time-bounded exit (leave 5 min buffer before hard kill)
+    _deadline: float | None = None
+    if args.max_runtime_minutes:
+        _deadline = time.time() + (args.max_runtime_minutes * 60) - 300  # 5 min buffer
 
     # --- Baseline backtest ---
     print("[0/baseline] Running baseline backtest...", file=sys.stderr)
@@ -580,6 +606,14 @@ def main() -> int:
     consecutive_syntax_errors = 0
 
     for iteration in range(1, args.iterations + 1):
+        # Check for graceful shutdown (SIGTERM/SIGINT) or deadline
+        if _shutdown_requested:
+            print(f"\n[evolve] Shutdown requested — stopping before iteration {iteration}.", file=sys.stderr)
+            break
+        if _deadline and time.time() > _deadline:
+            print(f"\n[evolve] Approaching time limit — stopping before iteration {iteration}.", file=sys.stderr)
+            break
+
         print(f"\n[{iteration}/{args.iterations}] Starting experiment...", file=sys.stderr)
 
         experiment_id = str(uuid.uuid4())
@@ -712,6 +746,9 @@ def main() -> int:
                 f"best remains {best_fitness:.4f}",
                 file=sys.stderr,
             )
+
+        # 9b. Brief cooldown to avoid API rate-limit accumulation
+        time.sleep(5)
 
         # 10. Log experiment
         record = {
